@@ -150,6 +150,36 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "ParallelJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `users.name DESC`
+
+			Name     string `users.name`
+			Address1 struct {
+				query.Table `addresses a1`
+				City        string `a1.city`
+			} `users.address_id = a1.id`
+			Address2 struct {
+				query.Table `addresses a2`
+				City        string `a2.city`
+			} `users.address_id = a2.id`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected results")
+		}
+
+		exp := users{Name: "John"}
+		exp.Address1.City = "New York"
+		exp.Address2.City = "New York"
+		if diff := cmp.Diff(exp, results[0]); diff != "" {
+			t.Error(diff)
+		}
+	})
+
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			Name sql.NullString `nam`
