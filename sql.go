@@ -13,20 +13,30 @@ type statement struct {
 	group      string
 	limit      string
 	offset     string
+	joins      []joinStatement
+}
+
+type joinStatement struct {
+	statement
+	on string
 }
 
 // SQL returns the query specified by the statement structure.
 func (s *statement) SQL() string {
 	var query strings.Builder
 	query.WriteString("SELECT ")
-	for i, col := range s.columns {
-		if i > 0 {
-			query.WriteString(", ")
-		}
-		query.WriteString(col)
-	}
+	s.writeColumns(&query, 0)
 	query.WriteString(" FROM ")
 	query.WriteString(s.table)
+
+	if len(s.joins) > 0 {
+		for _, join := range s.joins {
+			query.WriteString(" INNER JOIN ")
+			query.WriteString(join.table)
+			query.WriteString(" ON ")
+			query.WriteString(join.on)
+		}
+	}
 
 	if s.conditions != "" {
 		query.WriteString(" WHERE ")
@@ -48,4 +58,17 @@ func (s *statement) SQL() string {
 	}
 
 	return query.String()
+}
+
+func (s *statement) writeColumns(w *strings.Builder, i int) {
+	for _, col := range s.columns {
+		if i > 0 {
+			w.WriteString(", ")
+		}
+		w.WriteString(col)
+		i++
+	}
+	for _, join := range s.joins {
+		join.writeColumns(w, i)
+	}
 }

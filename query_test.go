@@ -4,7 +4,6 @@ package query_test
 import (
 	"context"
 	"database/sql"
-	"log"
 	"strings"
 	"testing"
 
@@ -45,7 +44,7 @@ func TestAll(t *testing.T) {
 		}
 		results, err := query.All(context.Background(), db, func(u users) int { return u.Count })
 		if err != nil {
-			t.Fatalf("all: %v", err)
+			t.Fatalf("failed to get: %v", err)
 		}
 		if len(results) == 0 {
 			t.Fatal("expected results")
@@ -96,6 +95,33 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "Join", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `name DESC`
+
+			Name      string `name`
+			Addresses struct {
+				City    string `city`
+				Country string `country`
+			} `users.address_id = addresses.id`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Errorf("failed to get: %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected results")
+		}
+
+		exp := users{Name: "John", Addresses: struct {
+			City    string "city"
+			Country string "country"
+		}{"New York", "United States"}}
+		if diff := cmp.Diff(exp, results[0]); diff != "" {
+			t.Error(diff)
+		}
+	})
+
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			Name sql.NullString `nam`
@@ -107,8 +133,9 @@ func TestAll(t *testing.T) {
 	})
 
 	runDB(t, "InvalidType", func(t *testing.T, db *sql.DB) {
+		type foo struct{}
 		type users struct {
-			Name struct{} `name`
+			Name foo `name`
 		}
 		_, err := query.All(context.Background(), db, query.Identity[users])
 		if err == nil || !strings.Contains(err.Error(), "unsupported Scan") {
@@ -160,14 +187,21 @@ func runDB(t *testing.T, name string, fn func(t *testing.T, db *sql.DB)) {
 		}
 		defer db.Close()
 
-		exec := func(query string) {
-			_, err := db.Exec(query)
+		exec := func(query string, args ...any) int64 {
+			res, err := db.Exec(query, args...)
 			if err != nil {
-				log.Fatal(err)
+				t.Fatal(err)
 			}
+			id, err := res.LastInsertId()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return id
 		}
-		exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)`)
-		exec(`INSERT INTO users (name) VALUES ('John'), ('James'), ('Gary'), ('Joe'), ('Bob'), (NULL)`)
+		exec(`CREATE TABLE addresses (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, country TEXT)`)
+		exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, address_id INTEGER REFERENCES addresses(id))`)
+		addr := exec(`INSERT INTO addresses (city, country) VALUES ('New York', 'United States')`)
+		exec(`INSERT INTO users (name, address_id) VALUES ('John', $1), ('James', $1), ('Gary', $1), ('Joe', $1), ('Bob', $1), (NULL, NULL)`, addr)
 
 		fn(t, db)
 	})

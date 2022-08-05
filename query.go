@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 // Transaction identifies a queriable database handle. This will most likley be a [sql.DB] or [sql.Tx].
@@ -65,7 +66,7 @@ func All[Source, Destination any](ctx context.Context, tx Transaction, transform
 	var src Source
 	query, bindings := prepare(&src)
 
-	rows, err := tx.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, query.SQL(), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query: %v", err)
 	}
@@ -91,35 +92,49 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 	var src Source
 	query, bindings := prepare(&src)
 
-	err := tx.QueryRowContext(ctx, query, args...).Scan(bindings...)
+	err := tx.QueryRowContext(ctx, query.SQL(), args...).Scan(bindings...)
 	return transform(src), err
 }
 
 // prepare returns the prepared SQL query and destination bindings suitable for use by [sql.Rows.Scan].
-func prepare[Source any](src *Source) (string, []any) {
-	t := reflect.TypeOf(src).Elem()
-	v := reflect.ValueOf(src).Elem()
-
-	bindings := make([]any, 0, t.NumField())
+func prepare(src any) (statement, []any) {
+	typ := reflect.TypeOf(src).Elem()
+	val := reflect.ValueOf(src).Elem()
+	bindings := make([]any, 0, typ.NumField())
 	stmt := statement{
 		columns: make([]string, 0, cap(bindings)),
-		table:   t.Name(),
+		table:   typ.Name(),
 	}
 	for i := 0; i < cap(stmt.columns); i++ {
-		switch t.Field(i).Type {
-		case reflect.TypeOf(Table{}):
-			stmt.table = string(t.Field(i).Tag)
-		case reflect.TypeOf(Conditions{}):
-			stmt.conditions = string(t.Field(i).Tag)
-		case reflect.TypeOf(OrderBy{}):
-			stmt.order = string(t.Field(i).Tag)
-		case reflect.TypeOf(GroupBy{}):
-			stmt.group = string(t.Field(i).Tag)
+		fld := typ.Field(i)
+		tag := string(fld.Tag)
+		switch {
+		case fld.Type == reflect.TypeOf(Table{}):
+			stmt.table = string(fld.Tag)
+		case fld.Type == reflect.TypeOf(Conditions{}):
+			stmt.conditions = tag
+		case fld.Type == reflect.TypeOf(OrderBy{}):
+			stmt.order = tag
+		case fld.Type == reflect.TypeOf(GroupBy{}):
+			stmt.group = tag
+		case fld.Type.Name() == "":
+			s, b := prepare(val.Field(i).Addr().Interface())
+			if s.table == "" {
+				s.table = strings.ToLower(fld.Name)
+			}
+			stmt.joins = append(stmt.joins, joinStatement{
+				statement: s,
+				on:        tag,
+			})
+			bindings = append(bindings, b...)
 		default:
-			stmt.columns = append(stmt.columns, string(t.Field(i).Tag))
-			bindings = append(bindings, v.Field(i).Addr().Interface())
+			if tag == "" {
+				panic(fmt.Errorf("%T.%s: struct tag must be provided", src, fld.Name))
+			}
+			stmt.columns = append(stmt.columns, tag)
+			bindings = append(bindings, val.Field(i).Addr().Interface())
 		}
 	}
 
-	return stmt.SQL(), bindings
+	return stmt, bindings
 }
