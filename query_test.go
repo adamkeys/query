@@ -35,6 +35,28 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "StructuredTag", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `q:"name ASC"`
+
+			ID   string         `q:"id"`
+			Name sql.NullString `q:"name"`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		names := make([]string, len(results))
+		for i, user := range results {
+			names[i] = user.Name.String
+		}
+		exp := []string{"", "Bob", "Gary", "James", "Joe", "John"}
+		if diff := cmp.Diff(exp, names); diff != "" {
+			t.Error(diff)
+		}
+	})
+
 	runDB(t, "GroupCount", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			query.GroupBy `SUBSTR(name, 1, 1)`

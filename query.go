@@ -107,7 +107,11 @@ func prepare(src any) (statement, []any) {
 	}
 	for i := 0; i < cap(stmt.columns); i++ {
 		fld := typ.Field(i)
-		tag := string(fld.Tag)
+		tag, ok := fld.Tag.Lookup("q")
+		if !ok {
+			tag = string(fld.Tag)
+		}
+
 		switch {
 		case fld.Type == reflect.TypeOf(Table{}):
 			stmt.table = tag

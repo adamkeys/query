@@ -34,3 +34,12 @@ Abusing language features for fun and profit, **query** enables writing SQL quer
         Count int `COUNT(*)`
     }
     // SELECT COUNT(*) FROM users
+
+### Conventional Struct Tags
+
+The caller may choose to use the conventional struct tag format. To use the query tag may be assigned the `q` tag name.
+
+    type users struct {
+        Count int `q:"COUNT(*)"`
+    }
+    // SELECT COUNT(*) FROM users
