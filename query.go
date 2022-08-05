@@ -43,19 +43,19 @@ func Identity[Source any](src Source) Source { return src }
 //
 //	type users struct {
 //		query.Conditions `id = ?`
-//		query.GroupBy    `name`
-//		query.OrderBy    `id`
+//		query.GroupBy `name`
+//		query.OrderBy `id`
 //
-//		ID               int            `id`
-//		Name             sql.NullString `name`
+//		ID            int            `id`
+//		Name          sql.NullString `name`
 //	}
 //
 // The table name is inferred from the struct name but may be overwritten by composing the [Table] struct. Example:
 //
 //	type users struct {
-//		query.Table      `user`
+//		query.Table `user`
 //
-//		Name             sql.NullString `name`
+//		Name        sql.NullString `name`
 //	}
 //
 // The caller should note that the Source value is reused on each row iteration and should take care to ensure that
@@ -110,7 +110,7 @@ func prepare(src any) (statement, []any) {
 		tag := string(fld.Tag)
 		switch {
 		case fld.Type == reflect.TypeOf(Table{}):
-			stmt.table = string(fld.Tag)
+			stmt.table = tag
 		case fld.Type == reflect.TypeOf(Conditions{}):
 			stmt.conditions = tag
 		case fld.Type == reflect.TypeOf(OrderBy{}):

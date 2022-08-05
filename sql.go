@@ -16,11 +16,6 @@ type statement struct {
 	joins      []joinStatement
 }
 
-type joinStatement struct {
-	statement
-	on string
-}
-
 // SQL returns the query specified by the statement structure.
 func (s *statement) SQL() string {
 	var query strings.Builder
@@ -29,15 +24,9 @@ func (s *statement) SQL() string {
 	query.WriteString(" FROM ")
 	query.WriteString(s.table)
 
-	if len(s.joins) > 0 {
-		for _, join := range s.joins {
-			query.WriteString(" INNER JOIN ")
-			query.WriteString(join.table)
-			query.WriteString(" ON ")
-			query.WriteString(join.on)
-		}
+	for _, join := range s.joins {
+		join.writeJoin(&query)
 	}
-
 	if s.conditions != "" {
 		query.WriteString(" WHERE ")
 		query.WriteString(s.conditions)
@@ -70,5 +59,23 @@ func (s *statement) writeColumns(w *strings.Builder, i int) {
 	}
 	for _, join := range s.joins {
 		join.writeColumns(w, i)
+	}
+}
+
+// a joinStatement represents a statement that is included as a join table. It consists of a statement along with
+// join conditions.
+type joinStatement struct {
+	statement
+	on string
+}
+
+func (j *joinStatement) writeJoin(w *strings.Builder) {
+	w.WriteString(" INNER JOIN ")
+	w.WriteString(j.table)
+	w.WriteString(" ON ")
+	w.WriteString(j.on)
+
+	for _, join := range j.joins {
+		join.writeJoin(w)
 	}
 }

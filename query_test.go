@@ -101,22 +101,50 @@ func TestAll(t *testing.T) {
 
 			Name      string `name`
 			Addresses struct {
-				City    string `city`
-				Country string `country`
+				City string `city`
 			} `users.address_id = addresses.id`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[users])
 		if err != nil {
-			t.Errorf("failed to get: %v", err)
+			t.Fatalf("failed to get: %v", err)
 		}
 		if len(results) == 0 {
 			t.Fatal("expected results")
 		}
 
 		exp := users{Name: "John", Addresses: struct {
-			City    string "city"
-			Country string "country"
-		}{"New York", "United States"}}
+			City string `city`
+		}{"New York"}}
+		if diff := cmp.Diff(exp, results[0]); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "NestedJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `users.name DESC`
+
+			Name      string `users.name`
+			Addresses struct {
+				City    string `city`
+				Country struct {
+					query.Table `countries`
+
+					Name string `countries.name`
+				} `addresses.country_id = countries.id`
+			} `users.address_id = addresses.id`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected results")
+		}
+
+		exp := users{Name: "John"}
+		exp.Addresses.City = "New York"
+		exp.Addresses.Country.Name = "United States"
 		if diff := cmp.Diff(exp, results[0]); diff != "" {
 			t.Error(diff)
 		}
@@ -190,7 +218,7 @@ func runDB(t *testing.T, name string, fn func(t *testing.T, db *sql.DB)) {
 		exec := func(query string, args ...any) int64 {
 			res, err := db.Exec(query, args...)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%s: %v", query, err)
 			}
 			id, err := res.LastInsertId()
 			if err != nil {
@@ -198,9 +226,11 @@ func runDB(t *testing.T, name string, fn func(t *testing.T, db *sql.DB)) {
 			}
 			return id
 		}
-		exec(`CREATE TABLE addresses (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, country TEXT)`)
+		exec(`CREATE TABLE countries (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)`)
+		exec(`CREATE TABLE addresses (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, country_id INTEGER REFERENCES countries(id))`)
 		exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, address_id INTEGER REFERENCES addresses(id))`)
-		addr := exec(`INSERT INTO addresses (city, country) VALUES ('New York', 'United States')`)
+		ctry := exec(`INSERT INTO countries (name) VALUES ('United States')`)
+		addr := exec(`INSERT INTO addresses (city, country_id) VALUES ('San Francisco', $1), ('New York', $1)`, ctry)
 		exec(`INSERT INTO users (name, address_id) VALUES ('John', $1), ('James', $1), ('Gary', $1), ('Joe', $1), ('Bob', $1), (NULL, NULL)`, addr)
 
 		fn(t, db)
