@@ -255,6 +255,152 @@ func TestOne(t *testing.T) {
 			t.Errorf("unexpected count; got: %v", count)
 		}
 	})
+
+	runDB(t, "StructuredTag", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `q:"name ASC"`
+
+			ID   string         `q:"id"`
+			Name sql.NullString `q:"name"`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		if result.Name.Valid {
+			t.Errorf("unexpected result; got: %v", result)
+		}
+	})
+
+	runDB(t, "Conditions", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.Conditions `name = ?`
+
+			Name sql.NullString `name`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users], "Bob")
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		if result.Name.String != "Bob" {
+			t.Errorf("unexpected result; got: %v", result)
+		}
+	})
+
+	runDB(t, "TableName", func(t *testing.T, db *sql.DB) {
+		type userTable struct {
+			query.Table      `users`
+			query.Conditions `name = ?`
+
+			Name sql.NullString `name`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[userTable], "Bob")
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		if result.Name.String != "Bob" {
+			t.Errorf("unexpected result; got: %v", result)
+		}
+	})
+
+	runDB(t, "Join", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `name DESC`
+
+			Name      string `name`
+			Addresses struct {
+				City string `city`
+			} `users.address_id = addresses.id`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		exp := users{Name: "John", Addresses: struct {
+			City string `city`
+		}{"New York"}}
+		if diff := cmp.Diff(exp, result); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "NestedJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `users.name DESC`
+
+			Name      string `users.name`
+			Addresses struct {
+				City    string `city`
+				Country struct {
+					query.Table `countries`
+
+					Name string `countries.name`
+				} `addresses.country_id = countries.id`
+			} `users.address_id = addresses.id`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		exp := users{Name: "John"}
+		exp.Addresses.City = "New York"
+		exp.Addresses.Country.Name = "United States"
+		if diff := cmp.Diff(exp, result); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "ParallelJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `users.name DESC`
+
+			Name     string `users.name`
+			Address1 struct {
+				query.Table `addresses a1`
+				City        string `a1.city`
+			} `users.address_id = a1.id`
+			Address2 struct {
+				query.Table `addresses a2`
+				City        string `a2.city`
+			} `users.address_id = a2.id`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		exp := users{Name: "John"}
+		exp.Address1.City = "New York"
+		exp.Address2.City = "New York"
+		if diff := cmp.Diff(exp, result); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			Name sql.NullString `nam`
+		}
+		_, err := query.One(context.Background(), db, query.Identity[users])
+		if err == nil || err.Error() != "no such column: nam" {
+			t.Errorf("unexpected error; got: %v", err)
+		}
+	})
+
+	runDB(t, "InvalidType", func(t *testing.T, db *sql.DB) {
+		type foo struct{}
+		type users struct {
+			Name foo `name`
+		}
+		_, err := query.One(context.Background(), db, query.Identity[users])
+		if err == nil || !strings.Contains(err.Error(), "unsupported Scan") {
+			t.Errorf("unexpected error; got: %v", err)
+		}
+	})
 }
 
 func runDB(t *testing.T, name string, fn func(t *testing.T, db *sql.DB)) {
