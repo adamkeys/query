@@ -57,7 +57,7 @@ func TestAll(t *testing.T) {
 		}
 	})
 
-	runDB(t, "InferredSelectJoin", func(t *testing.T, db *sql.DB) {
+	runDB(t, "InferredJoin", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			ID        string
 			Addresses struct {
@@ -218,6 +218,30 @@ func TestAll(t *testing.T) {
 		exp.Address2.City = "New York"
 		if diff := cmp.Diff(exp, results[0]); diff != "" {
 			t.Error(diff)
+		}
+	})
+
+	runDB(t, "LeftJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.Conditions `q:"users.name IS NOT NULL"`
+
+			Name      string
+			Addresses struct {
+				query.LeftJoin
+
+				City sql.NullString
+			} `q:"users.name = addresses.id"`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected results")
+		}
+
+		if results[0].Addresses.City.Valid {
+			t.Error("expected city to be invalid")
 		}
 	})
 

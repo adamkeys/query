@@ -32,3 +32,29 @@ type OrderBy struct{}
 //	  query.GroupBy `q:"name"`
 //	}
 type GroupBy struct{}
+
+// Limit can be composed in a query struct to limit the number of results. This is the LIMIT section of the SQL statement.
+// Example:
+//
+//	type users struct {
+//	  query.Limit `q:"10"`
+//	}
+type Limit struct{}
+
+// Offset can be composed in a query struct to offset the results. This is the OFFSET section of the SQL statement.
+// Example:
+//
+//	type users struct {
+//	  query.Offset `q:"10"`
+//	}
+type Offset struct{}
+
+// LeftJoin can be composed in a join query struct to signify that a left join should be used. This is the LEFT JOIN
+// section of the SQL statement. Example:
+//
+//	type users struct {
+//		Addresses struct {
+//			query.LeftJoin
+//		} `users.address_id = addresses.id`
+//	}
+type LeftJoin struct{}

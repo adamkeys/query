@@ -116,6 +116,12 @@ func prepare(src any) (statement, []any) {
 			stmt.order = tag
 		case fld.Type == reflect.TypeOf(GroupBy{}):
 			stmt.group = tag
+		case fld.Type == reflect.TypeOf(LeftJoin{}):
+			stmt.join = joinLeft
+		case fld.Type == reflect.TypeOf(Limit{}):
+			stmt.limit = tag
+		case fld.Type == reflect.TypeOf(Offset{}):
+			stmt.offset = tag
 		case fld.Type.Name() == "":
 			if tag == "" {
 				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
@@ -124,10 +130,11 @@ func prepare(src any) (statement, []any) {
 			if s.table == "" {
 				s.table = fld.Name
 			}
-			stmt.joins = append(stmt.joins, joinStatement{
-				statement: s,
-				on:        tag,
-			})
+			if s.join == joinNone {
+				s.join = joinInner
+			}
+			s.on = tag
+			stmt.joins = append(stmt.joins, s)
 			bindings = append(bindings, b...)
 		default:
 			col := column{name: tag}

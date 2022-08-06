@@ -12,6 +12,14 @@ type column struct {
 	useTable bool
 }
 
+type join int
+
+const (
+	joinNone join = iota
+	joinInner
+	joinLeft
+)
+
 // statement represents the properties of a query. It is used to facilitate the generation of a SQL query.
 type statement struct {
 	columns    []column
@@ -21,7 +29,11 @@ type statement struct {
 	group      string
 	limit      string
 	offset     string
-	joins      []joinStatement
+
+	join join
+	on   string
+
+	joins []statement
 }
 
 // SQL returns the query specified by the statement structure.
@@ -48,9 +60,11 @@ func (s *statement) SQL() string {
 		query.WriteString(s.order)
 	}
 	if s.limit != "" {
+		query.WriteString(" LIMIT ")
 		query.WriteString(s.limit)
 	}
 	if s.offset != "" {
+		query.WriteString(" OFFSET ")
 		query.WriteString(s.offset)
 	}
 
@@ -74,20 +88,20 @@ func (s *statement) writeColumns(w *strings.Builder, i int) {
 	}
 }
 
-// a joinStatement represents a statement that is included as a join table. It consists of a statement along with
-// join conditions.
-type joinStatement struct {
-	statement
-	on string
-}
-
-func (j *joinStatement) writeJoin(w *strings.Builder) {
-	w.WriteString(" INNER JOIN ")
-	w.WriteString(j.table)
+func (s *statement) writeJoin(w *strings.Builder) {
+	switch s.join {
+	case joinNone:
+		return
+	case joinInner:
+		w.WriteString(" INNER JOIN ")
+	case joinLeft:
+		w.WriteString(" LEFT JOIN ")
+	}
+	w.WriteString(s.table)
 	w.WriteString(" ON ")
-	w.WriteString(j.on)
+	w.WriteString(s.on)
 
-	for _, join := range j.joins {
+	for _, join := range s.joins {
 		join.writeJoin(w)
 	}
 }
