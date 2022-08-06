@@ -12,8 +12,10 @@ type column struct {
 	useTable bool
 }
 
+// join identifies a join type that specifies how tables should be joined.
 type join int
 
+// The available join models.
 const (
 	joinNone join = iota
 	joinInner
