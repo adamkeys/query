@@ -45,8 +45,8 @@ func Identity[Source any](src Source) Source { return src }
 //		query.GroupBy    `q:"name"`
 //		query.OrderBy    `q:"id"`
 //
-//		ID               int            `q:"id"`
-//		Name             sql.NullString `q:"name"`
+//		ID   int            `q:"id"`
+//		Name sql.NullString `q:"name"`
 //	}
 //
 // The table name is inferred from the struct name but may be overwritten by composing the [Table] struct. Example:
@@ -54,7 +54,7 @@ func Identity[Source any](src Source) Source { return src }
 //	type users struct {
 //		query.Table `q:"user"`
 //
-//		Name        sql.NullString `q:"name"`
+//		Name sql.NullString `q:"name"`
 //	}
 //
 // The caller should note that the Source value is reused on each row iteration and should take care to ensure that
