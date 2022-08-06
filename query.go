@@ -121,6 +121,9 @@ func prepare(src any) (statement, []any) {
 		case fld.Type == reflect.TypeOf(GroupBy{}):
 			stmt.group = tag
 		case fld.Type.Name() == "":
+			if tag == "" {
+				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
+			}
 			s, b := prepare(val.Field(i).Addr().Interface())
 			if s.table == "" {
 				s.table = fld.Name
