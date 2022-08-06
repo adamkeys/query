@@ -27,8 +27,8 @@ func Identity[Source any](src Source) Source { return src }
 // the database is transformed to the desired Destination type using the supplied transform function. The caller may
 // use the [Identity] function if the caller wishes for Source and Destination to be equal.
 //
-// The Source type uses struct tags to specify the properties of the database query. Each field in the struct should
-// have a corresponding field tag which provides the database field name in the query. Example:
+// The Source type uses struct tags to specify the properties of the database query. If a struct tag is not provided,
+// the name will be inferred from the field name. Example:
 //
 //	type users struct {
 //		ID   int            `q:"id"`
