@@ -245,6 +245,39 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "Limit", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.Limit `q:"1"`
+
+			Name string
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		if len(results) != 1 {
+			t.Errorf("unexpected number of results; got: %v", len(results))
+		}
+	})
+
+	runDB(t, "Offset", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.Limit  `q:"10"`
+			query.Offset `q:"100"`
+
+			Name string
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		if len(results) != 0 {
+			t.Errorf("unexpected number of results; got: %v", len(results))
+		}
+	})
+
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			Name sql.NullString `q:"nam"`
