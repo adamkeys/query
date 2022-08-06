@@ -407,6 +407,27 @@ func TestOne(t *testing.T) {
 		}
 	})
 
+	runDB(t, "LeftJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.Conditions `q:"users.name IS NOT NULL"`
+
+			Name      string
+			Addresses struct {
+				query.LeftJoin
+
+				City sql.NullString
+			} `q:"users.name = addresses.id"`
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		if result.Addresses.City.Valid {
+			t.Error("expected city to be invalid")
+		}
+	})
+
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			Name sql.NullString `q:"nam"`
