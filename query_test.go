@@ -57,6 +57,47 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "InferredSelect", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `name ASC`
+
+			ID   string
+			Name sql.NullString
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		names := make([]string, len(results))
+		for i, user := range results {
+			names[i] = user.Name.String
+		}
+		exp := []string{"", "Bob", "Gary", "James", "Joe", "John"}
+		if diff := cmp.Diff(exp, names); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "InferredSelectJoin", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			ID        string
+			Addresses struct {
+				ID string
+			} `users.address_id = addresses.id`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		for _, r := range results {
+			if r.ID == "" || r.Addresses.ID == "" {
+				t.Errorf("expected value to have IDs; got: %v", r)
+			}
+		}
+	})
+
 	runDB(t, "GroupCount", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			query.GroupBy `SUBSTR(name, 1, 1)`

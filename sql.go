@@ -4,9 +4,17 @@ import (
 	"strings"
 )
 
+// column identifies a select column. It contains the column name and a useTable flag. If useTable is set, the
+// query builder will specify that the column name is associated with the current table. This prevents overlapping
+// column names in joins.
+type column struct {
+	name     string
+	useTable bool
+}
+
 // statement represents the properties of a query. It is used to facilitate the generation of a SQL query.
 type statement struct {
-	columns    []string
+	columns    []column
 	table      string
 	conditions string
 	order      string
@@ -54,7 +62,11 @@ func (s *statement) writeColumns(w *strings.Builder, i int) {
 		if i > 0 {
 			w.WriteString(", ")
 		}
-		w.WriteString(col)
+		if col.useTable {
+			w.WriteString(s.table)
+			w.WriteByte('.')
+		}
+		w.WriteString(col.name)
 		i++
 	}
 	for _, join := range s.joins {

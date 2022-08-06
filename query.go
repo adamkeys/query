@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"strings"
 )
 
 // Transaction identifies a queriable database handle. This will most likley be a [sql.DB] or [sql.Tx].
@@ -102,7 +101,7 @@ func prepare(src any) (statement, []any) {
 	val := reflect.ValueOf(src).Elem()
 	bindings := make([]any, 0, typ.NumField())
 	stmt := statement{
-		columns: make([]string, 0, cap(bindings)),
+		columns: make([]column, 0, cap(bindings)),
 		table:   typ.Name(),
 	}
 	for i := 0; i < cap(stmt.columns); i++ {
@@ -124,7 +123,7 @@ func prepare(src any) (statement, []any) {
 		case fld.Type.Name() == "":
 			s, b := prepare(val.Field(i).Addr().Interface())
 			if s.table == "" {
-				s.table = strings.ToLower(fld.Name)
+				s.table = fld.Name
 			}
 			stmt.joins = append(stmt.joins, joinStatement{
 				statement: s,
@@ -132,10 +131,11 @@ func prepare(src any) (statement, []any) {
 			})
 			bindings = append(bindings, b...)
 		default:
+			col := column{name: tag}
 			if tag == "" {
-				panic(fmt.Errorf("%T.%s: struct tag must be provided", src, fld.Name))
+				col = column{name: fld.Name, useTable: true}
 			}
-			stmt.columns = append(stmt.columns, tag)
+			stmt.columns = append(stmt.columns, col)
 			bindings = append(bindings, val.Field(i).Addr().Interface())
 		}
 	}
