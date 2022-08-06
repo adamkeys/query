@@ -57,6 +57,16 @@ func Identity[Source any](src Source) Source { return src }
 //		Name sql.NullString `q:"name"`
 //	}
 //
+// Joins may be specified by including a child structure. A struct tag defining the join relationship is required.
+// Example:
+//
+//	type users struct {
+//		Name      string
+//		Addresses struct {
+//			City string
+//		} `q:"users.address_id = addresses.id"`
+//	}
+//
 // The caller should note that the Source value is reused on each row iteration and should take care to ensure that
 // values are copied in the transform function.
 //
