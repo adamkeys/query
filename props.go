@@ -5,7 +5,7 @@ package query
 // Example:
 //
 //	type users struct {
-//	  query.Table `user`
+//	  query.Table `q:"user"`
 //	}
 type Table struct{}
 
@@ -13,7 +13,7 @@ type Table struct{}
 // statment. Example:
 //
 //	type users struct {
-//	  query.Conditions `name = ?`
+//	  query.Conditions `q:"name = ?"`
 //	}
 type Conditions struct{}
 
@@ -21,7 +21,7 @@ type Conditions struct{}
 // statement. Example:
 //
 //	type users struct {
-//	  query.OrderBy `name`
+//	  query.OrderBy `q:"name"`
 //	}
 type OrderBy struct{}
 
@@ -29,6 +29,6 @@ type OrderBy struct{}
 // Example:
 //
 //	type users struct {
-//	  query.GroupBy `name`
+//	  query.GroupBy `q:"name"`
 //	}
 type GroupBy struct{}

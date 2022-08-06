@@ -15,28 +15,6 @@ import (
 func TestAll(t *testing.T) {
 	runDB(t, "BasicSelect", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `name ASC`
-
-			ID   string         `id`
-			Name sql.NullString `name`
-		}
-		results, err := query.All(context.Background(), db, query.Identity[users])
-		if err != nil {
-			t.Fatalf("failed to get: %v", err)
-		}
-
-		names := make([]string, len(results))
-		for i, user := range results {
-			names[i] = user.Name.String
-		}
-		exp := []string{"", "Bob", "Gary", "James", "Joe", "John"}
-		if diff := cmp.Diff(exp, names); diff != "" {
-			t.Error(diff)
-		}
-	})
-
-	runDB(t, "StructuredTag", func(t *testing.T, db *sql.DB) {
-		type users struct {
 			query.OrderBy `q:"name ASC"`
 
 			ID   string         `q:"id"`
@@ -59,7 +37,7 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "InferredSelect", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `name ASC`
+			query.OrderBy `q:"name ASC"`
 
 			ID   string
 			Name sql.NullString
@@ -84,7 +62,7 @@ func TestAll(t *testing.T) {
 			ID        string
 			Addresses struct {
 				ID string
-			} `users.address_id = addresses.id`
+			} `q:"users.address_id = addresses.id"`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[users])
 		if err != nil {
@@ -100,10 +78,10 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "GroupCount", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.GroupBy `SUBSTR(name, 1, 1)`
-			query.OrderBy `c DESC`
+			query.GroupBy `q:"SUBSTR(name, 1, 1)"`
+			query.OrderBy `q:"c DESC"`
 
-			Count int `COUNT(*) AS c`
+			Count int `q:"COUNT(*) AS c"`
 		}
 		results, err := query.All(context.Background(), db, func(u users) int { return u.Count })
 		if err != nil {
@@ -121,9 +99,9 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "Conditions", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.Conditions `name = ?`
+			query.Conditions `q:"name = ?"`
 
-			Name sql.NullString `name`
+			Name sql.NullString `q:"name"`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[users], "Bob")
 		if err != nil {
@@ -140,10 +118,10 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "TableName", func(t *testing.T, db *sql.DB) {
 		type userTable struct {
-			query.Table      `users`
-			query.Conditions `name = ?`
+			query.Table      `q:"users"`
+			query.Conditions `q:"name = ?"`
 
-			Name sql.NullString `name`
+			Name sql.NullString `q:"name"`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[userTable], "Bob")
 		if err != nil {
@@ -160,12 +138,12 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "Join", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `name DESC`
+			query.OrderBy `q:"name DESC"`
 
-			Name      string `name`
+			Name      string `q:"name"`
 			Addresses struct {
-				City string `city`
-			} `users.address_id = addresses.id`
+				City string `q:"city"`
+			} `q:"users.address_id = addresses.id"`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[users])
 		if err != nil {
@@ -176,7 +154,7 @@ func TestAll(t *testing.T) {
 		}
 
 		exp := users{Name: "John", Addresses: struct {
-			City string `city`
+			City string `q:"city"`
 		}{"New York"}}
 		if diff := cmp.Diff(exp, results[0]); diff != "" {
 			t.Error(diff)
@@ -185,17 +163,17 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "NestedJoin", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `users.name DESC`
+			query.OrderBy `q:"users.name DESC"`
 
-			Name      string `users.name`
+			Name      string `q:"users.name"`
 			Addresses struct {
-				City    string `city`
+				City    string `q:"city"`
 				Country struct {
-					query.Table `countries`
+					query.Table `q:"countries"`
 
-					Name string `countries.name`
-				} `addresses.country_id = countries.id`
-			} `users.address_id = addresses.id`
+					Name string `q:"countries.name"`
+				} `q:"addresses.country_id = countries.id"`
+			} `q:"users.address_id = addresses.id"`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[users])
 		if err != nil {
@@ -215,17 +193,17 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "ParallelJoin", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `users.name DESC`
+			query.OrderBy `q:"users.name DESC"`
 
-			Name     string `users.name`
+			Name     string `q:"users.name"`
 			Address1 struct {
-				query.Table `addresses a1`
-				City        string `a1.city`
-			} `users.address_id = a1.id`
+				query.Table `q:"addresses a1"`
+				City        string `q:"a1.city"`
+			} `q:"users.address_id = a1.id"`
 			Address2 struct {
-				query.Table `addresses a2`
-				City        string `a2.city`
-			} `users.address_id = a2.id`
+				query.Table `q:"addresses a2"`
+				City        string `q:"a2.city"`
+			} `q:"users.address_id = a2.id"`
 		}
 		results, err := query.All(context.Background(), db, query.Identity[users])
 		if err != nil {
@@ -245,7 +223,7 @@ func TestAll(t *testing.T) {
 
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			Name sql.NullString `nam`
+			Name sql.NullString `q:"nam"`
 		}
 		_, err := query.All(context.Background(), db, query.Identity[users])
 		if err == nil || err.Error() != "query: no such column: nam" {
@@ -256,7 +234,7 @@ func TestAll(t *testing.T) {
 	runDB(t, "InvalidType", func(t *testing.T, db *sql.DB) {
 		type foo struct{}
 		type users struct {
-			Name foo `name`
+			Name foo `q:"name"`
 		}
 		_, err := query.All(context.Background(), db, query.Identity[users])
 		if err == nil || !strings.Contains(err.Error(), "unsupported Scan") {
@@ -268,10 +246,10 @@ func TestAll(t *testing.T) {
 func TestOne(t *testing.T) {
 	runDB(t, "Conditions", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.Conditions `name = ?`
+			query.Conditions `q:"name = ?"`
 
-			ID   string         `id`
-			Name sql.NullString `name`
+			ID   string         `q:"id"`
+			Name sql.NullString `q:"name"`
 		}
 		user, err := query.One(context.Background(), db, query.Identity[users], "Bob")
 		if err != nil {
@@ -285,7 +263,7 @@ func TestOne(t *testing.T) {
 
 	runDB(t, "Count", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			Count int `COUNT(*)`
+			Count int `q:"COUNT(*)"`
 		}
 		count, err := query.One(context.Background(), db, func(u users) int { return u.Count })
 		if err != nil {
@@ -297,28 +275,11 @@ func TestOne(t *testing.T) {
 		}
 	})
 
-	runDB(t, "StructuredTag", func(t *testing.T, db *sql.DB) {
-		type users struct {
-			query.OrderBy `q:"name ASC"`
-
-			ID   string         `q:"id"`
-			Name sql.NullString `q:"name"`
-		}
-		result, err := query.One(context.Background(), db, query.Identity[users])
-		if err != nil {
-			t.Fatalf("failed to get: %v", err)
-		}
-
-		if result.Name.Valid {
-			t.Errorf("unexpected result; got: %v", result)
-		}
-	})
-
 	runDB(t, "Conditions", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.Conditions `name = ?`
+			query.Conditions `q:"name = ?"`
 
-			Name sql.NullString `name`
+			Name sql.NullString `q:"name"`
 		}
 		result, err := query.One(context.Background(), db, query.Identity[users], "Bob")
 		if err != nil {
@@ -332,10 +293,10 @@ func TestOne(t *testing.T) {
 
 	runDB(t, "TableName", func(t *testing.T, db *sql.DB) {
 		type userTable struct {
-			query.Table      `users`
-			query.Conditions `name = ?`
+			query.Table      `q:"users"`
+			query.Conditions `q:"name = ?"`
 
-			Name sql.NullString `name`
+			Name sql.NullString `q:"name"`
 		}
 		result, err := query.One(context.Background(), db, query.Identity[userTable], "Bob")
 		if err != nil {
@@ -349,19 +310,19 @@ func TestOne(t *testing.T) {
 
 	runDB(t, "Join", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `name DESC`
+			query.OrderBy `q:"name DESC"`
 
-			Name      string `name`
+			Name      string `q:"name"`
 			Addresses struct {
-				City string `city`
-			} `users.address_id = addresses.id`
+				City string `q:"city"`
+			} `q:"users.address_id = addresses.id"`
 		}
 		result, err := query.One(context.Background(), db, query.Identity[users])
 		if err != nil {
 			t.Fatalf("failed to get: %v", err)
 		}
 		exp := users{Name: "John", Addresses: struct {
-			City string `city`
+			City string `q:"city"`
 		}{"New York"}}
 		if diff := cmp.Diff(exp, result); diff != "" {
 			t.Error(diff)
@@ -370,17 +331,17 @@ func TestOne(t *testing.T) {
 
 	runDB(t, "NestedJoin", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `users.name DESC`
+			query.OrderBy `q:"users.name DESC"`
 
-			Name      string `users.name`
+			Name      string `q:"users.name"`
 			Addresses struct {
-				City    string `city`
+				City    string `q:"city"`
 				Country struct {
-					query.Table `countries`
+					query.Table `q:"countries"`
 
-					Name string `countries.name`
-				} `addresses.country_id = countries.id`
-			} `users.address_id = addresses.id`
+					Name string `q:"countries.name"`
+				} `q:"addresses.country_id = countries.id"`
+			} `q:"users.address_id = addresses.id"`
 		}
 		result, err := query.One(context.Background(), db, query.Identity[users])
 		if err != nil {
@@ -397,17 +358,17 @@ func TestOne(t *testing.T) {
 
 	runDB(t, "ParallelJoin", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			query.OrderBy `users.name DESC`
+			query.OrderBy `q:"users.name DESC"`
 
-			Name     string `users.name`
+			Name     string `q:"users.name"`
 			Address1 struct {
-				query.Table `addresses a1`
-				City        string `a1.city`
-			} `users.address_id = a1.id`
+				query.Table `q:"addresses a1"`
+				City        string `q:"a1.city"`
+			} `q:"users.address_id = a1.id"`
 			Address2 struct {
-				query.Table `addresses a2`
-				City        string `a2.city`
-			} `users.address_id = a2.id`
+				query.Table `q:"addresses a2"`
+				City        string `q:"a2.city"`
+			} `q:"users.address_id = a2.id"`
 		}
 		result, err := query.One(context.Background(), db, query.Identity[users])
 		if err != nil {
@@ -424,7 +385,7 @@ func TestOne(t *testing.T) {
 
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
-			Name sql.NullString `nam`
+			Name sql.NullString `q:"nam"`
 		}
 		_, err := query.One(context.Background(), db, query.Identity[users])
 		if err == nil || err.Error() != "no such column: nam" {
@@ -435,7 +396,7 @@ func TestOne(t *testing.T) {
 	runDB(t, "InvalidType", func(t *testing.T, db *sql.DB) {
 		type foo struct{}
 		type users struct {
-			Name foo `name`
+			Name foo `q:"name"`
 		}
 		_, err := query.One(context.Background(), db, query.Identity[users])
 		if err == nil || !strings.Contains(err.Error(), "unsupported Scan") {

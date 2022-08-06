@@ -31,8 +31,8 @@ func Identity[Source any](src Source) Source { return src }
 // have a corresponding field tag which provides the database field name in the query. Example:
 //
 //	type users struct {
-//		ID   int            `id`
-//		Name sql.NullString `name`
+//		ID   int            `q:"id"`
+//		Name sql.NullString `q:"name"`
 //	}
 //	// Query: SELECT id, name FROM users
 //	results, _ := query.All(context.Background(), db, query.Identity[users])
@@ -41,20 +41,20 @@ func Identity[Source any](src Source) Source { return src }
 // include [Conditions], [GroupBy], and [OrderBy]. Example:
 //
 //	type users struct {
-//		query.Conditions `id = ?`
-//		query.GroupBy `name`
-//		query.OrderBy `id`
+//		query.Conditions `q:"id = ?"`
+//		query.GroupBy    `q:"name"`
+//		query.OrderBy    `q:"id"`
 //
-//		ID            int            `id`
-//		Name          sql.NullString `name`
+//		ID               int            `q:"id"`
+//		Name             sql.NullString `q:"name"`
 //	}
 //
 // The table name is inferred from the struct name but may be overwritten by composing the [Table] struct. Example:
 //
 //	type users struct {
-//		query.Table `user`
+//		query.Table `q:"user"`
 //
-//		Name        sql.NullString `name`
+//		Name        sql.NullString `q:"name"`
 //	}
 //
 // The caller should note that the Source value is reused on each row iteration and should take care to ensure that
@@ -106,11 +106,7 @@ func prepare(src any) (statement, []any) {
 	}
 	for i := 0; i < cap(stmt.columns); i++ {
 		fld := typ.Field(i)
-		tag, ok := fld.Tag.Lookup("q")
-		if !ok {
-			tag = string(fld.Tag)
-		}
-
+		tag := fld.Tag.Get("q")
 		switch {
 		case fld.Type == reflect.TypeOf(Table{}):
 			stmt.table = tag
