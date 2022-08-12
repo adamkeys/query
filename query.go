@@ -114,18 +114,18 @@ func prepare(src any) (statement, []any) {
 		columns: make([]column, 0, cap(bindings)),
 		table:   typ.Name(),
 	}
-	for i := 0; i < cap(stmt.columns); i++ {
+	for i := 0; i < typ.NumField(); i++ {
 		fld := typ.Field(i)
 		tag := fld.Tag.Get("q")
 		switch {
 		case fld.Type == reflect.TypeOf(Table{}):
 			stmt.table = tag
 		case fld.Type == reflect.TypeOf(Conditions{}):
-			stmt.conditions = tag
+			stmt.conditions = append(stmt.conditions, tag)
 		case fld.Type == reflect.TypeOf(OrderBy{}):
-			stmt.order = tag
+			stmt.order = append(stmt.order, tag)
 		case fld.Type == reflect.TypeOf(GroupBy{}):
-			stmt.group = tag
+			stmt.group = append(stmt.group, tag)
 		case fld.Type == reflect.TypeOf(LeftJoin{}):
 			stmt.join = joinLeft
 		case fld.Type == reflect.TypeOf(Limit{}):
@@ -147,6 +147,17 @@ func prepare(src any) (statement, []any) {
 			stmt.joins = append(stmt.joins, s)
 			bindings = append(bindings, b...)
 		default:
+			if fld.Anonymous {
+				s, b := prepare(val.Field(i).Addr().Interface())
+				stmt.columns = append(s.columns, stmt.columns...)
+				stmt.conditions = append(s.conditions, stmt.conditions...)
+				stmt.group = append(s.group, stmt.group...)
+				stmt.order = append(s.order, stmt.order...)
+				stmt.joins = append(s.joins, stmt.joins...)
+				bindings = append(bindings, b...)
+				continue
+			}
+
 			col := column{name: tag}
 			if tag == "" {
 				col = column{name: fld.Name, useTable: true}

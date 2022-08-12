@@ -26,9 +26,9 @@ const (
 type statement struct {
 	columns    []column
 	table      string
-	conditions string
-	order      string
-	group      string
+	conditions []string
+	order      []string
+	group      []string
 	limit      string
 	offset     string
 
@@ -49,17 +49,34 @@ func (s *statement) SQL() string {
 	for _, join := range s.joins {
 		join.writeJoin(&query)
 	}
-	if s.conditions != "" {
+	if len(s.conditions) > 0 {
 		query.WriteString(" WHERE ")
-		query.WriteString(s.conditions)
+		for i, condition := range s.conditions {
+			if i > 0 {
+				query.WriteString(" AND ")
+			}
+			query.WriteByte('(')
+			query.WriteString(condition)
+			query.WriteByte(')')
+		}
 	}
-	if s.group != "" {
+	if len(s.group) > 0 {
 		query.WriteString(" GROUP BY ")
-		query.WriteString(s.group)
+		for i, group := range s.group {
+			if i > 0 {
+				query.WriteString(", ")
+			}
+			query.WriteString(group)
+		}
 	}
-	if s.order != "" {
+	if len(s.order) > 0 {
 		query.WriteString(" ORDER BY ")
-		query.WriteString(s.order)
+		for i, order := range s.order {
+			if i > 0 {
+				query.WriteString(", ")
+			}
+			query.WriteString(order)
+		}
 	}
 	if s.limit != "" {
 		query.WriteString(" LIMIT ")

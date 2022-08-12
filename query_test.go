@@ -278,6 +278,114 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "Composition", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			ID   string
+			Name sql.NullString
+		}
+		type users struct {
+			query.OrderBy `q:"name ASC"`
+
+			BaseUser
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		names := make([]string, len(results))
+		for i, user := range results {
+			names[i] = user.Name.String
+		}
+		exp := []string{"", "Bob", "Gary", "James", "Joe", "John"}
+		if diff := cmp.Diff(exp, names); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "CompositionProperties", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			query.Conditions `q:"name = 'Bob' OR name = 'James'"`
+			query.OrderBy    `q:"name ASC"`
+
+			ID   string
+			Name sql.NullString
+		}
+		type users struct {
+			query.Conditions `q:"name = 'Bob'"`
+
+			BaseUser
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		names := make([]string, len(results))
+		for i, user := range results {
+			names[i] = user.Name.String
+		}
+		exp := []string{"Bob"}
+		if diff := cmp.Diff(exp, names); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "CompositionGroup", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			query.GroupBy `q:"SUBSTR(name, 1, 1)"`
+			query.OrderBy `q:"c DESC"`
+
+			Count int `q:"COUNT(*) AS c"`
+		}
+		type users struct {
+			BaseUser
+		}
+		results, err := query.All(context.Background(), db, func(u users) int { return u.Count })
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected results")
+		}
+
+		exp := []int{3, 1, 1, 1}
+		if diff := cmp.Diff(exp, results); diff != "" {
+			t.Error(diff)
+		}
+	})
+
+	runDB(t, "CompositionJoin", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			Addresses struct {
+				City string `q:"city"`
+			} `q:"users.address_id = addresses.id"`
+		}
+		type users struct {
+			query.OrderBy `q:"name"`
+
+			BaseUser
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		if len(results) == 0 {
+			t.Fatal("expected results")
+		}
+
+		exp := users{
+			BaseUser: BaseUser{
+				Addresses: struct {
+					City string `q:"city"`
+				}{"New York"},
+			},
+		}
+		if diff := cmp.Diff(exp, results[0]); diff != "" {
+			t.Error(diff)
+		}
+	})
+
 	runDB(t, "InvalidField", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			Name sql.NullString `q:"nam"`
@@ -458,6 +566,97 @@ func TestOne(t *testing.T) {
 
 		if result.Addresses.City.Valid {
 			t.Error("expected city to be invalid")
+		}
+	})
+
+	runDB(t, "Composition", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			ID   string
+			Name string
+		}
+		type users struct {
+			query.OrderBy `q:"name DESC"`
+
+			BaseUser
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		const exp = "John"
+		if result.Name != exp {
+			t.Errorf("expected name to be: %q; got: %q", exp, result.Name)
+		}
+	})
+
+	runDB(t, "CompositionProperties", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			query.Conditions `q:"name = 'Bob' OR name = 'James'"`
+			query.OrderBy    `q:"name ASC"`
+
+			ID   string
+			Name string
+		}
+		type users struct {
+			query.Conditions `q:"name = 'Bob'"`
+
+			BaseUser
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		const exp = "Bob"
+		if result.Name != exp {
+			t.Errorf("expected name to be: %q; got: %q", exp, result.Name)
+		}
+	})
+
+	runDB(t, "CompositionGroup", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			Count int `q:"COUNT(*) AS c"`
+		}
+		type users struct {
+			BaseUser
+		}
+		result, err := query.One(context.Background(), db, func(u users) int { return u.Count })
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		const exp = 6
+		if result != exp {
+			t.Errorf("expected count to be: %d; got: %d", exp, result)
+		}
+	})
+
+	runDB(t, "CompositionJoin", func(t *testing.T, db *sql.DB) {
+		type BaseUser struct {
+			Addresses struct {
+				City string `q:"city"`
+			} `q:"users.address_id = addresses.id"`
+		}
+		type users struct {
+			query.OrderBy `q:"name"`
+
+			BaseUser
+		}
+		result, err := query.One(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		exp := users{
+			BaseUser: BaseUser{
+				Addresses: struct {
+					City string `q:"city"`
+				}{"New York"},
+			},
+		}
+		if diff := cmp.Diff(exp, result); diff != "" {
+			t.Error(diff)
 		}
 	})
 
