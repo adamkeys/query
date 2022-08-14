@@ -4,6 +4,7 @@ package query_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"testing"
 
@@ -242,6 +243,26 @@ func TestAll(t *testing.T) {
 
 		if results[0].Addresses.City.Valid {
 			t.Error("expected city to be invalid")
+		}
+	})
+
+	runDB(t, "JoinConditions", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `q:"name DESC"`
+
+			Name      string `q:"name"`
+			Addresses struct {
+				query.Conditions `q:"city != 'New York'"`
+
+				City string `q:"city"`
+			} `q:"users.address_id = addresses.id"`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[users])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+		if len(results) != 0 {
+			t.Fatal("expected number of results")
 		}
 	})
 
@@ -566,6 +587,23 @@ func TestOne(t *testing.T) {
 
 		if result.Addresses.City.Valid {
 			t.Error("expected city to be invalid")
+		}
+	})
+
+	runDB(t, "JoinConditions", func(t *testing.T, db *sql.DB) {
+		type users struct {
+			query.OrderBy `q:"name DESC"`
+
+			Name      string `q:"name"`
+			Addresses struct {
+				query.Conditions `q:"city != 'New York'"`
+
+				City string `q:"city"`
+			} `q:"users.address_id = addresses.id"`
+		}
+		_, err := query.One(context.Background(), db, query.Identity[users])
+		if !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("failed to filter join results: %v", err)
 		}
 	})
 

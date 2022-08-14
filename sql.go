@@ -49,34 +49,17 @@ func (s *statement) SQL() string {
 	for _, join := range s.joins {
 		join.writeJoin(&query)
 	}
-	if len(s.conditions) > 0 {
+	if s.hasConditions() {
 		query.WriteString(" WHERE ")
-		for i, condition := range s.conditions {
-			if i > 0 {
-				query.WriteString(" AND ")
-			}
-			query.WriteByte('(')
-			query.WriteString(condition)
-			query.WriteByte(')')
-		}
+		s.writeConditions(&query, 0)
 	}
-	if len(s.group) > 0 {
+	if s.hasGroup() {
 		query.WriteString(" GROUP BY ")
-		for i, group := range s.group {
-			if i > 0 {
-				query.WriteString(", ")
-			}
-			query.WriteString(group)
-		}
+		s.writeGroup(&query, 0)
 	}
-	if len(s.order) > 0 {
+	if s.hasOrder() {
 		query.WriteString(" ORDER BY ")
-		for i, order := range s.order {
-			if i > 0 {
-				query.WriteString(", ")
-			}
-			query.WriteString(order)
-		}
+		s.writeOrder(&query, 0)
 	}
 	if s.limit != "" {
 		query.WriteString(" LIMIT ")
@@ -122,5 +105,70 @@ func (s *statement) writeJoin(w *strings.Builder) {
 
 	for _, join := range s.joins {
 		join.writeJoin(w)
+	}
+}
+
+func (s *statement) hasConditions() bool {
+	for _, s := range s.joins {
+		if s.hasConditions() {
+			return true
+		}
+	}
+	return len(s.conditions) > 0
+}
+
+func (s *statement) writeConditions(query *strings.Builder, depth int) {
+	for i, condition := range s.conditions {
+		if i > 0 {
+			query.WriteString(" AND ")
+		}
+		query.WriteByte('(')
+		query.WriteString(condition)
+		query.WriteByte(')')
+	}
+	for _, join := range s.joins {
+		join.writeConditions(query, depth+1)
+	}
+}
+
+func (s *statement) hasGroup() bool {
+	for _, s := range s.joins {
+		if s.hasGroup() {
+			return true
+		}
+	}
+	return len(s.group) > 0
+}
+
+func (s *statement) writeGroup(query *strings.Builder, depth int) {
+	for i, group := range s.group {
+		if i+depth > 0 {
+			query.WriteString(", ")
+		}
+		query.WriteString(group)
+	}
+	for _, join := range s.joins {
+		join.writeGroup(query, depth+1)
+	}
+}
+
+func (s *statement) hasOrder() bool {
+	for _, s := range s.joins {
+		if s.hasOrder() {
+			return true
+		}
+	}
+	return len(s.order) > 0
+}
+
+func (s *statement) writeOrder(query *strings.Builder, depth int) {
+	for i, order := range s.order {
+		if i+depth > 0 {
+			query.WriteString(", ")
+		}
+		query.WriteString(order)
+	}
+	for _, join := range s.joins {
+		join.writeOrder(query, depth+1)
 	}
 }
