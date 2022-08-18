@@ -119,7 +119,7 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 		return results[0], nil
 	}
 
-	query, bindings, _ := prepare(&src)
+	query, bindings, _ := prepare(reflect.ValueOf(&src))
 	err := tx.QueryRowContext(ctx, query.SQL(), args...).Scan(bindings...)
 	return transform(src), err
 }
@@ -127,20 +127,20 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 // prepareSet wraps prepareNestedSet to add the values to the top level slice rather than slices nested within
 // stored values. This is intended to be the top level call when preparing a set of results.
 func prepareSet(set any) (statement, []any, func()) {
-	val := reflect.ValueOf(set).Elem()
-	stmt, bindings, complete := prepareNestedSet(set)
+	val := reflect.ValueOf(set)
+	stmt, bindings, complete := prepareNestedSet(val)
 	return stmt, bindings, func() {
-		complete(val)
+		complete(val.Elem())
 	}
 }
 
 // prepareNestedSet returns a prepared SQL statement, bindings suitable for use by [sql.Rows.Scan], and a completion
 // function which is to be called after [sql.Rows.Scan] has been scanned into the bindings. The completion function
 // adds the bound results to the passed in slice value.
-func prepareNestedSet(set any) (statement, []any, func(reflect.Value)) {
-	val := reflect.ValueOf(set).Elem()
+func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value)) {
+	val := set.Elem()
 	row := reflect.New(val.Type().Elem())
-	stmt, bindings, complete := prepare(row.Interface())
+	stmt, bindings, complete := prepare(row)
 
 	var ident any
 	stmt.columns = append([]column{{name: fmt.Sprintf("id AS ident%d", rand.Int31()), useTable: true}}, stmt.columns...)
@@ -159,9 +159,9 @@ func prepareNestedSet(set any) (statement, []any, func(reflect.Value)) {
 }
 
 // prepare returns the prepared SQL query and destination bindings suitable for use by [sql.Rows.Scan].
-func prepare(src any) (statement, []any, func(reflect.Value)) {
-	typ := reflect.TypeOf(src).Elem()
-	val := reflect.ValueOf(src).Elem()
+func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
+	val := src.Elem()
+	typ := val.Type()
 	bindings := make([]any, 0, typ.NumField())
 	stmt := statement{
 		columns: make([]column, 0, cap(bindings)),
@@ -187,7 +187,7 @@ func prepare(src any) (statement, []any, func(reflect.Value)) {
 		case fld.Type == reflect.TypeOf(Offset{}):
 			stmt.offset = tag
 		case fld.Type.Kind() == reflect.Slice:
-			s, b, f := prepareNestedSet(val.Field(i).Addr().Interface())
+			s, b, f := prepareNestedSet(val.Field(i).Addr())
 			if s.table == "" {
 				s.table = fld.Name
 			}
@@ -205,7 +205,7 @@ func prepare(src any) (statement, []any, func(reflect.Value)) {
 			if tag == "" {
 				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
 			}
-			s, b, f := prepare(val.Field(i).Addr().Interface())
+			s, b, f := prepare(val.Field(i).Addr())
 			if s.table == "" {
 				s.table = fld.Name
 			}
@@ -218,7 +218,7 @@ func prepare(src any) (statement, []any, func(reflect.Value)) {
 			completion = appendFn(completion, f)
 		default:
 			if fld.Anonymous {
-				s, b, f := prepare(val.Field(i).Addr().Interface())
+				s, b, f := prepare(val.Field(i).Addr())
 				stmt.columns = append(s.columns, stmt.columns...)
 				stmt.conditions = append(s.conditions, stmt.conditions...)
 				stmt.group = append(s.group, stmt.group...)
