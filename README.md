@@ -2,11 +2,11 @@
 
 # **query** – A Go SQL query package
 
-Abusing language features for fun and profit, **query** enables writing SQL queries using `struct` types with liberal use of struct tags.
+Abusing language features for fun and profit, **query** enables writing SQL queries using `struct` types with liberal use of struct tags. No longer does the query need to be disjoined from the structure. The row results are populated right into the same query.
 
 ## Introduction
 
-**query** provides a set of helper functions to assist with querying a SQL database. The caller is able to prepare SQL queries through defining a Go `struct` which doubles as the scan target when retrieving a SQL result set.
+**query** provides a set of helper functions to assist with querying a SQL database. The caller is able to prepare SQL queries through defining a Go `struct` which doubles as the scan target when retrieving a SQL result set. The results may then be transformed into the application domain model in a type-safe manner, or the original query `struct` can be used by the application using the `Ident` function. This reduces the load on the developer to have to define a query, define SQL-safe variables to scan into, and convert the results into a usable model by combining the first and second operation.
 
 ## Example Queries
 
