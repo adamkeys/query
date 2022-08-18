@@ -1,4 +1,6 @@
-# **query** – A Go database query package
+![query](logo.svg)
+
+# A Go database query package
 
 Abusing language features for fun and profit, **query** enables writing SQL queries using `q:"struct"` types with liberal use of struct tags.
 
