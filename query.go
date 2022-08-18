@@ -107,7 +107,7 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 	// When the query contains a many relationship the call is passed to the [All] function to evaluate all of the
 	// incoming rows to build up the necessary value hierarchy. The first result returned by [All] is passed
 	// back to the caller.
-	if hasMany(src) {
+	if hasMany(reflect.TypeOf(src)) {
 		var dest Destination
 		results, err := All(ctx, tx, transform, args...)
 		if err != nil {
@@ -257,17 +257,15 @@ func appendFn(head, tail func(reflect.Value)) func(reflect.Value) {
 }
 
 // hasMany returns true if the input type produces a query that contains a many relationship.
-func hasMany(src any) bool {
-	typ := reflect.TypeOf(src)
-	switch typ.Kind() {
+func hasMany(src reflect.Type) bool {
+	switch src.Kind() {
 	case reflect.Ptr:
-		return hasMany(reflect.ValueOf(src).Elem().Interface())
+		return hasMany(src.Elem())
 	case reflect.Slice:
 		return true
 	case reflect.Struct:
-		val := reflect.ValueOf(src)
-		for i := 0; i < typ.NumField(); i++ {
-			if hasMany(val.Field(i).Interface()) {
+		for i := 0; i < src.NumField(); i++ {
+			if hasMany(src.Field(i).Type) {
 				return true
 			}
 		}
