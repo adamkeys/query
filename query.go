@@ -68,8 +68,19 @@ func Identity[Source any](src Source) Source { return src }
 //		} `q:"users.address_id = addresses.id"`
 //	}
 //
+// Joins may also be defined in a "has many" fashion. These are defined like standard joins but as a slice type.
+// Note that the query is modified to include primary key columns for relating records together. This may impact
+// some queries (e.g. GROUP BY) in potentially unexpected ways. The primary key must be named "id". Example:
+//
+//	type users struct {
+//		Name      string
+//		Addresses []struct {
+//			City string
+//		} `q:"users.address_id = addresses.id"`
+//	}
+//
 // The caller should note that the Source value is reused on each row iteration and should take care to ensure that
-// values are copied in the transform function.
+// values are copied in the transform function. Slices excepted.
 //
 // An error will be returned if any of the [Transaction] operations fail.
 func All[Source, Destination any](ctx context.Context, tx Transaction, transform Transform[Source, Destination], args ...any) ([]Destination, error) {
