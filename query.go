@@ -128,9 +128,18 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 // stored values. This is intended to be the top level call when preparing a set of results.
 func prepareSet(set any) (statement, []any, func()) {
 	val := reflect.ValueOf(set)
+	elem := val.Elem()
+	if !hasMany(elem.Type().Elem()) {
+		row := reflect.New(elem.Type().Elem())
+		stmt, bindings, _ := prepare(row)
+		return stmt, bindings, func() {
+			elem.Set(reflect.Append(elem, row.Elem()))
+		}
+	}
+
 	stmt, bindings, complete := prepareNestedSet(val)
 	return stmt, bindings, func() {
-		complete(val.Elem())
+		complete(elem)
 	}
 }
 
