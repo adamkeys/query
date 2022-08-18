@@ -315,6 +315,37 @@ func TestAll(t *testing.T) {
 		}
 	})
 
+	runDB(t, "LeftJoinMany", func(t *testing.T, db *sql.DB) {
+		type addresses struct {
+			City  string
+			Users []struct {
+				query.LeftJoin
+				query.Conditions `q:"name = 'John' OR name = 'Bob' OR name IS NULL"`
+				query.OrderBy    `q:"name"`
+
+				Name sql.NullString
+			} `q:"users.address_id = addresses.id"`
+		}
+		results, err := query.All(context.Background(), db, query.Identity[addresses])
+		if err != nil {
+			t.Fatalf("failed to get: %v", err)
+		}
+
+		addr := addresses{}
+		addr.City = "New York"
+		for _, name := range []string{"Bob", "John"} {
+			addr.Users = append(addr.Users, struct {
+				query.LeftJoin
+				query.Conditions `q:"name = 'John' OR name = 'Bob' OR name IS NULL"`
+				query.OrderBy    `q:"name"`
+				Name             sql.NullString
+			}{Name: sql.NullString{String: name, Valid: true}})
+		}
+		if diff := cmp.Diff([]addresses{{City: "San Francisco"}, addr}, results); diff != "" {
+			t.Error(diff)
+		}
+	})
+
 	runDB(t, "Limit", func(t *testing.T, db *sql.DB) {
 		type users struct {
 			query.Limit `q:"1"`

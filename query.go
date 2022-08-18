@@ -167,6 +167,9 @@ func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value))
 	bindings = append([]any{&ident}, bindings...)
 	visited := make(map[any]reflect.Value)
 	return stmt, bindings, func(val reflect.Value) {
+		if ident == nil {
+			return
+		}
 		if v, ok := visited[ident]; ok {
 			complete(v)
 			return
