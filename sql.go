@@ -140,15 +140,16 @@ func (s *statement) hasGroup() bool {
 	return len(s.group) > 0
 }
 
-func (s *statement) writeGroup(query *strings.Builder, depth int) {
-	for i, group := range s.group {
-		if i+depth > 0 {
+func (s *statement) writeGroup(query *strings.Builder, elements int) {
+	for _, group := range s.group {
+		if elements > 0 {
 			query.WriteString(", ")
 		}
 		query.WriteString(group)
+		elements++
 	}
 	for _, join := range s.joins {
-		join.writeGroup(query, depth+1)
+		join.writeGroup(query, elements)
 	}
 }
 
@@ -161,14 +162,15 @@ func (s *statement) hasOrder() bool {
 	return len(s.order) > 0
 }
 
-func (s *statement) writeOrder(query *strings.Builder, depth int) {
-	for i, order := range s.order {
-		if i+depth > 0 {
+func (s *statement) writeOrder(query *strings.Builder, elements int) {
+	for _, order := range s.order {
+		if elements > 0 {
 			query.WriteString(", ")
 		}
 		query.WriteString(order)
+		elements++
 	}
 	for _, join := range s.joins {
-		join.writeOrder(query, depth+1)
+		join.writeOrder(query, elements)
 	}
 }

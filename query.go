@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/rand"
 	"reflect"
 )
 
@@ -72,8 +73,8 @@ func Identity[Source any](src Source) Source { return src }
 //
 // An error will be returned if any of the [Transaction] operations fail.
 func All[Source, Destination any](ctx context.Context, tx Transaction, transform Transform[Source, Destination], args ...any) ([]Destination, error) {
-	var src Source
-	query, bindings := prepare(&src)
+	var results []Source
+	query, bindings, complete := prepareSet(&results)
 
 	rows, err := tx.QueryContext(ctx, query.SQL(), args...)
 	if err != nil {
@@ -81,32 +82,84 @@ func All[Source, Destination any](ctx context.Context, tx Transaction, transform
 	}
 	defer rows.Close()
 
-	var results []Destination
 	for rows.Next() {
 		if err := rows.Scan(bindings...); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
-
-		results = append(results, transform(src))
+		complete()
 	}
 	if err := rows.Close(); err != nil {
 		return nil, fmt.Errorf("close: %w", err)
 	}
 
-	return results, nil
+	transformed := make([]Destination, len(results))
+	for i, result := range results {
+		transformed[i] = transform(result)
+	}
+	return transformed, nil
 }
 
-// One is like [All] but returns only the first result of the query. An error will be returned if any of the [Transaction] operations fail.
+// One is like [All] but returns only the first result of the query. An error will be returned if any of
+// the [Transaction] operations fail.
 func One[Source, Destination any](ctx context.Context, tx Transaction, transform Transform[Source, Destination], args ...any) (Destination, error) {
 	var src Source
-	query, bindings := prepare(&src)
 
+	// When the query contains a many relationship the call is passed to the [All] function to evaluate all of the
+	// incoming rows to build up the necessary value hierarchy. The first result returned by [All] is passed
+	// back to the caller.
+	if hasMany(src) {
+		var dest Destination
+		results, err := All(ctx, tx, transform, args...)
+		if err != nil {
+			return dest, err
+		}
+		if len(results) == 0 {
+			return dest, sql.ErrNoRows
+		}
+		return results[0], nil
+	}
+
+	query, bindings, _ := prepare(&src)
 	err := tx.QueryRowContext(ctx, query.SQL(), args...).Scan(bindings...)
 	return transform(src), err
 }
 
+// prepareSet wraps prepareNestedSet to add the values to the top level slice rather than slices nested within
+// stored values. This is inteded to be the top level call when preparing a set of results.
+func prepareSet(set any) (statement, []any, func()) {
+	val := reflect.ValueOf(set).Elem()
+	stmt, bindings, complete := prepareNestedSet(set)
+	return stmt, bindings, func() {
+		complete(val)
+	}
+}
+
+// prepareNestedSet returns a prepared SQL statement, bindings suitable for use by [sql.Rows.Scan], and a completion
+// function which is to be called after [sql.Rows.Scan] has been scanned into the bindings. The completion function
+// adds the bound results to the passed in slice value.
+func prepareNestedSet(set any) (statement, []any, func(reflect.Value)) {
+	val := reflect.ValueOf(set).Elem()
+	row := reflect.New(val.Type().Elem())
+	stmt, bindings, complete := prepare(row.Interface())
+
+	var ident any
+	stmt.columns = append([]column{{name: fmt.Sprintf("id AS ident%d", rand.Int31()), useTable: true}}, stmt.columns...)
+	bindings = append([]any{&ident}, bindings...)
+	visited := make(map[any]reflect.Value)
+	return stmt, bindings, func(val reflect.Value) {
+		if v, ok := visited[ident]; ok {
+			complete(v)
+			return
+		}
+		val.Set(reflect.Append(val, row.Elem()))
+		added := val.Index(val.Len() - 1)
+		visited[ident] = added
+		complete(added)
+	}
+}
+
 // prepare returns the prepared SQL query and destination bindings suitable for use by [sql.Rows.Scan].
-func prepare(src any) (statement, []any) {
+func prepare(src any) (statement, []any, func(reflect.Value)) {
 	typ := reflect.TypeOf(src).Elem()
 	val := reflect.ValueOf(src).Elem()
 	bindings := make([]any, 0, typ.NumField())
@@ -114,6 +167,7 @@ func prepare(src any) (statement, []any) {
 		columns: make([]column, 0, cap(bindings)),
 		table:   typ.Name(),
 	}
+	completion := func(reflect.Value) {}
 	for i := 0; i < typ.NumField(); i++ {
 		fld := typ.Field(i)
 		tag := fld.Tag.Get("q")
@@ -132,11 +186,8 @@ func prepare(src any) (statement, []any) {
 			stmt.limit = tag
 		case fld.Type == reflect.TypeOf(Offset{}):
 			stmt.offset = tag
-		case fld.Type.Name() == "":
-			if tag == "" {
-				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
-			}
-			s, b := prepare(val.Field(i).Addr().Interface())
+		case fld.Type.Kind() == reflect.Slice:
+			s, b, f := prepareNestedSet(val.Field(i).Addr().Interface())
 			if s.table == "" {
 				s.table = fld.Name
 			}
@@ -146,15 +197,35 @@ func prepare(src any) (statement, []any) {
 			s.on = tag
 			stmt.joins = append(stmt.joins, s)
 			bindings = append(bindings, b...)
+			idx := i
+			completion = appendFn(completion, func(v reflect.Value) {
+				f(v.Field(idx))
+			})
+		case fld.Type.Name() == "":
+			if tag == "" {
+				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
+			}
+			s, b, f := prepare(val.Field(i).Addr().Interface())
+			if s.table == "" {
+				s.table = fld.Name
+			}
+			if s.join == joinNone {
+				s.join = joinInner
+			}
+			s.on = tag
+			stmt.joins = append(stmt.joins, s)
+			bindings = append(bindings, b...)
+			completion = appendFn(completion, f)
 		default:
 			if fld.Anonymous {
-				s, b := prepare(val.Field(i).Addr().Interface())
+				s, b, f := prepare(val.Field(i).Addr().Interface())
 				stmt.columns = append(s.columns, stmt.columns...)
 				stmt.conditions = append(s.conditions, stmt.conditions...)
 				stmt.group = append(s.group, stmt.group...)
 				stmt.order = append(s.order, stmt.order...)
 				stmt.joins = append(s.joins, stmt.joins...)
 				bindings = append(bindings, b...)
+				completion = appendFn(completion, f)
 				continue
 			}
 
@@ -167,5 +238,39 @@ func prepare(src any) (statement, []any) {
 		}
 	}
 
-	return stmt, bindings
+	return stmt, bindings, completion
+}
+
+// appendFn returns a function that will call both the supplied head and tail functions. The supplied functions may
+// be nil.
+func appendFn(head, tail func(reflect.Value)) func(reflect.Value) {
+	if head == nil {
+		return tail
+	}
+	if tail == nil {
+		return head
+	}
+	return func(v reflect.Value) {
+		head(v)
+		tail(v)
+	}
+}
+
+// hasMany returns true if the input type produces a query that contains a many relationship.
+func hasMany(src any) bool {
+	typ := reflect.TypeOf(src)
+	switch typ.Kind() {
+	case reflect.Ptr:
+		return hasMany(reflect.ValueOf(src).Elem().Interface())
+	case reflect.Slice:
+		return true
+	case reflect.Struct:
+		val := reflect.ValueOf(src)
+		for i := 0; i < typ.NumField(); i++ {
+			if hasMany(val.Field(i).Interface()) {
+				return true
+			}
+		}
+	}
+	return false
 }
