@@ -241,21 +241,6 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 	return stmt, bindings, completion
 }
 
-// appendFn returns a function that will call both the supplied head and tail functions. The supplied functions may
-// be nil.
-func appendFn(head, tail func(reflect.Value)) func(reflect.Value) {
-	if head == nil {
-		return tail
-	}
-	if tail == nil {
-		return head
-	}
-	return func(v reflect.Value) {
-		head(v)
-		tail(v)
-	}
-}
-
 // hasMany returns true if the input type produces a query that contains a many relationship.
 func hasMany(src reflect.Type) bool {
 	switch src.Kind() {
@@ -271,4 +256,19 @@ func hasMany(src reflect.Type) bool {
 		}
 	}
 	return false
+}
+
+// appendFn returns a function that will call both the supplied head and tail functions. The supplied functions may
+// be nil.
+func appendFn(head, tail func(reflect.Value)) func(reflect.Value) {
+	if head == nil {
+		return tail
+	}
+	if tail == nil {
+		return head
+	}
+	return func(v reflect.Value) {
+		head(v)
+		tail(v)
+	}
 }
