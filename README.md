@@ -49,7 +49,7 @@ Abusing language features for fun and profit, **query** enables writing SQL quer
                 }
             }
             return user
-        }, userId)
+        }, userID)
     }
 
 ## Example Queries
