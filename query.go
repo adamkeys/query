@@ -9,7 +9,7 @@ import (
 	"reflect"
 )
 
-// Transaction identifies a queriable database handle. This will most likley be a [sql.DB] or [sql.Tx].
+// Transaction identifies a queryable database handle. This will most likely be a [sql.DB] or [sql.Tx].
 type Transaction interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -125,7 +125,7 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 }
 
 // prepareSet wraps prepareNestedSet to add the values to the top level slice rather than slices nested within
-// stored values. This is inteded to be the top level call when preparing a set of results.
+// stored values. This is intended to be the top level call when preparing a set of results.
 func prepareSet(set any) (statement, []any, func()) {
 	val := reflect.ValueOf(set).Elem()
 	stmt, bindings, complete := prepareNestedSet(set)
