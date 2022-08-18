@@ -1,12 +1,12 @@
 ![query](logo.svg)
 
-# A Go database query package
+# **query** – A Go SQL query package
 
-Abusing language features for fun and profit, **query** enables writing SQL queries using `q:"struct"` types with liberal use of struct tags.
+Abusing language features for fun and profit, **query** enables writing SQL queries using `struct` types with liberal use of struct tags.
 
 ## Introduction
 
-**query** provides a set of helper functions to assist with querying a SQL database. The caller is able to prepare SQL queries through defining a Go `q:"struct"` which doublts as the scan target when retriving a SQL resultset.
+**query** provides a set of helper functions to assist with querying a SQL database. The caller is able to prepare SQL queries through defining a Go `struct` which doubles as the scan target when retrieving a SQL result set.
 
 ## Example Queries
 
@@ -15,6 +15,8 @@ Abusing language features for fun and profit, **query** enables writing SQL quer
         Name sql.NullString `q:"name"`
     }
     // SELECT id, name FROM users
+
+&nbsp;
 
     type users struct {
         query.Table      `q:"user"`
@@ -31,6 +33,7 @@ Abusing language features for fun and profit, **query** enables writing SQL quer
     //   GROUP BY id, name ORDER BY name DESC
     //   LIMIT 10 OFFSET ?
 
+&nbsp;
 
     type users struct {
         Count int `q:"COUNT(*)"`
