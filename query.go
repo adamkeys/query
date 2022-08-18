@@ -99,7 +99,7 @@ func All[Source, Destination any](ctx context.Context, tx Transaction, transform
 		}
 		complete()
 	}
-	if err := rows.Close(); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("close: %w", err)
 	}
 
