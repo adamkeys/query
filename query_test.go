@@ -365,6 +365,19 @@ func TestAllJoinManySharedRow(t *testing.T) {
 	}
 }
 
+func TestAllJoinManyTagRequired(t *testing.T) {
+	defer func() {
+		if err := recover(); err == nil {
+			t.Error("expected many relationship without ON conditions to panic")
+		}
+	}()
+
+	type users struct {
+		Addresses []struct{ City string }
+	}
+	query.All(context.Background(), db, query.Identity[users])
+}
+
 func TestAllLimit(t *testing.T) {
 	type users struct {
 		query.Limit `q:"1"`

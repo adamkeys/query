@@ -220,6 +220,9 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, refl
 		case fld.Type == reflect.TypeOf(Offset{}):
 			stmt.offset = tag
 		case fld.Type.Kind() == reflect.Slice:
+			if tag == "" {
+				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
+			}
 			s, b, f := prepareNestedSet(val.Field(i).Addr())
 			if s.table == "" {
 				s.table = defaultNamer.Table(fieldInfo{fld})
