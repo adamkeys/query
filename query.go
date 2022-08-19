@@ -163,7 +163,11 @@ func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value))
 	stmt, bindings, complete := prepare(row)
 
 	var ident any
-	stmt.columns = append([]column{{name: fmt.Sprintf("id AS ident%d", rand.Int31()), useTable: true}}, stmt.columns...)
+	stmt.columns = append([]column{{
+		name:     defaultNamer.Ident(val.Type()),
+		as:       fmt.Sprintf("ident%d", rand.Int31()),
+		useTable: true,
+	}}, stmt.columns...)
 	bindings = append([]any{&ident}, bindings...)
 	visited := make(map[any]reflect.Value)
 	return stmt, bindings, func(val reflect.Value) {
@@ -188,7 +192,7 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 	bindings := make([]any, 0, typ.NumField())
 	stmt := statement{
 		columns: make([]column, 0, cap(bindings)),
-		table:   typ.Name(),
+		table:   defaultNamer.Table(typ),
 	}
 	completion := func(reflect.Value) {}
 	for i := 0; i < typ.NumField(); i++ {
@@ -212,7 +216,7 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 		case fld.Type.Kind() == reflect.Slice:
 			s, b, f := prepareNestedSet(val.Field(i).Addr())
 			if s.table == "" {
-				s.table = fld.Name
+				s.table = defaultNamer.Table(fieldInfo{fld})
 			}
 			if s.join == joinNone {
 				s.join = joinInner
@@ -230,7 +234,7 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 			}
 			s, b, f := prepare(val.Field(i).Addr())
 			if s.table == "" {
-				s.table = fld.Name
+				s.table = defaultNamer.Table(fieldInfo{fld})
 			}
 			if s.join == joinNone {
 				s.join = joinInner
@@ -254,7 +258,10 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 
 			col := column{name: tag}
 			if tag == "" {
-				col = column{name: fld.Name, useTable: true}
+				col = column{
+					name:     defaultNamer.Column(fieldInfo{fld}),
+					useTable: true,
+				}
 			}
 			stmt.columns = append(stmt.columns, col)
 			bindings = append(bindings, val.Field(i).Addr().Interface())
