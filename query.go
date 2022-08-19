@@ -121,7 +121,7 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 		return results[0], nil
 	}
 
-	query, bindings, _ := prepare(reflect.ValueOf(&src))
+	query, bindings, _ := prepare(reflect.ValueOf(&src), 0)
 	err := tx.QueryRowContext(ctx, query.SQL(), args...).Scan(bindings...)
 	return transform(src), err
 }
@@ -133,7 +133,7 @@ func prepareSet(set any) (statement, []any, func()) {
 	elem := val.Elem()
 	if !hasMany(elem.Type().Elem()) {
 		row := reflect.New(elem.Type().Elem())
-		stmt, bindings, _ := prepare(row)
+		stmt, bindings, _ := prepare(row, 0)
 		return stmt, bindings, func() {
 			elem.Set(reflect.Append(elem, row.Elem()))
 		}
@@ -151,7 +151,7 @@ func prepareSet(set any) (statement, []any, func()) {
 func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value)) {
 	val := set.Elem()
 	row := reflect.New(val.Type().Elem())
-	stmt, bindings, complete := prepare(row)
+	stmt, bindings, complete := prepare(row, 0)
 
 	var ident any
 	stmt.columns = append([]column{{
@@ -177,13 +177,12 @@ func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value))
 }
 
 // prepare returns the prepared SQL query and destination bindings suitable for use by [sql.Rows.Scan].
-func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
+func prepare(src reflect.Value, depth int) (statement, []any, func(reflect.Value)) {
 	val := src.Elem()
 	typ := val.Type()
 	bindings := make([]any, 0, typ.NumField())
 	stmt := statement{
 		columns: make([]column, 0, cap(bindings)),
-		table:   defaultNamer.Table(typ),
 	}
 	completion := func(reflect.Value) {}
 	for i := 0; i < typ.NumField(); i++ {
@@ -223,7 +222,7 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 			if tag == "" {
 				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
 			}
-			s, b, f := prepare(val.Field(i).Addr())
+			s, b, f := prepare(val.Field(i).Addr(), depth+1)
 			if s.table == "" {
 				s.table = defaultNamer.Table(fieldInfo{fld})
 			}
@@ -233,17 +232,26 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 			s.on = tag
 			stmt.joins = append(stmt.joins, s)
 			bindings = append(bindings, b...)
-			completion = appendFn(completion, f)
+			idx := i
+			completion = appendFn(completion, func(v reflect.Value) {
+				f(v.Field(idx))
+			})
 		default:
 			if fld.Anonymous {
-				s, b, f := prepare(val.Field(i).Addr())
+				s, b, f := prepare(val.Field(i).Addr(), depth+1)
+				if stmt.table == "" {
+					stmt.table = s.table
+				}
 				stmt.columns = append(s.columns, stmt.columns...)
 				stmt.conditions = append(s.conditions, stmt.conditions...)
 				stmt.group = append(s.group, stmt.group...)
 				stmt.order = append(s.order, stmt.order...)
 				stmt.joins = append(s.joins, stmt.joins...)
 				bindings = append(bindings, b...)
-				completion = appendFn(completion, f)
+				idx := i
+				completion = appendFn(completion, func(v reflect.Value) {
+					f(v.Field(idx))
+				})
 				continue
 			}
 
@@ -257,6 +265,10 @@ func prepare(src reflect.Value) (statement, []any, func(reflect.Value)) {
 			stmt.columns = append(stmt.columns, col)
 			bindings = append(bindings, val.Field(i).Addr().Interface())
 		}
+	}
+
+	if depth == 0 && stmt.table == "" {
+		stmt.table = defaultNamer.Table(typ)
 	}
 
 	return stmt, bindings, completion
