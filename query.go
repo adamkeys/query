@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strconv"
+	"strings"
 )
 
 // Transaction identifies a queryable database handle. This will most likely be a [sql.DB] or [sql.Tx].
@@ -150,14 +152,14 @@ func prepareSet(set any) (statement, []any, func()) {
 
 	stmt, bindings, complete := prepareNestedSet(val)
 	return stmt, bindings, func() {
-		complete(elem)
+		complete(nil, elem)
 	}
 }
 
 // prepareNestedSet returns a prepared SQL statement, bindings suitable for use by [sql.Rows.Scan], and a completion
 // function which is to be called after [sql.Rows.Scan] has been scanned into the bindings. The completion function
 // adds the bound results to the passed in slice value.
-func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value)) {
+func prepareNestedSet(set reflect.Value) (statement, []any, func(*rowRef, reflect.Value)) {
 	val := set.Elem()
 	row := reflect.New(val.Type().Elem())
 	stmt, bindings, complete := prepare(row, 0)
@@ -169,31 +171,36 @@ func prepareNestedSet(set reflect.Value) (statement, []any, func(reflect.Value))
 		useTable: true,
 	}}, stmt.columns...)
 	bindings = append([]any{&ident}, bindings...)
-	visited := make(map[any]reflect.Value)
-	return stmt, bindings, func(val reflect.Value) {
+
+	visited := make(map[string]reflect.Value)
+	return stmt, bindings, func(parent *rowRef, val reflect.Value) {
+		_ = set
 		if ident == nil {
 			return
 		}
-		if v, ok := visited[ident]; ok {
-			complete(v)
+
+		ref := rowRef{parent: parent, ident: asString(ident)}
+		hash := ref.Hash()
+		if v, ok := visited[hash]; ok {
+			complete(&ref, v)
 			return
 		}
 		val.Set(reflect.Append(val, row.Elem()))
 		added := val.Index(val.Len() - 1)
-		visited[ident] = added
-		complete(added)
+		visited[hash] = added
+		complete(&ref, added)
 	}
 }
 
 // prepare returns the prepared SQL query and destination bindings suitable for use by [sql.Rows.Scan].
-func prepare(src reflect.Value, depth int) (statement, []any, func(reflect.Value)) {
+func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, reflect.Value)) {
 	val := src.Elem()
 	typ := val.Type()
 	bindings := make([]any, 0, typ.NumField())
 	stmt := statement{
 		columns: make([]column, 0, cap(bindings)),
 	}
-	completion := func(reflect.Value) {}
+	completion := func(*rowRef, reflect.Value) {}
 	for i := 0; i < typ.NumField(); i++ {
 		fld := typ.Field(i)
 		tag := fld.Tag.Get("q")
@@ -224,8 +231,8 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(reflect.Value
 			stmt.joins = append(stmt.joins, s)
 			bindings = append(bindings, b...)
 			idx := i
-			completion = appendFn(completion, func(v reflect.Value) {
-				f(v.Field(idx))
+			completion = appendFn(completion, func(r *rowRef, v reflect.Value) {
+				f(r, v.Field(idx))
 			})
 		case fld.Type.Name() == "":
 			if tag == "" {
@@ -242,8 +249,8 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(reflect.Value
 			stmt.joins = append(stmt.joins, s)
 			bindings = append(bindings, b...)
 			idx := i
-			completion = appendFn(completion, func(v reflect.Value) {
-				f(v.Field(idx))
+			completion = appendFn(completion, func(r *rowRef, v reflect.Value) {
+				f(r, v.Field(idx))
 			})
 		default:
 			if fld.Anonymous {
@@ -258,8 +265,8 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(reflect.Value
 				stmt.joins = append(s.joins, stmt.joins...)
 				bindings = append(bindings, b...)
 				idx := i
-				completion = appendFn(completion, func(v reflect.Value) {
-					f(v.Field(idx))
+				completion = appendFn(completion, func(r *rowRef, v reflect.Value) {
+					f(r, v.Field(idx))
 				})
 				continue
 			}
@@ -302,15 +309,50 @@ func hasMany(src reflect.Type) bool {
 
 // appendFn returns a function that will call both the supplied head and tail functions. The supplied functions may
 // be nil.
-func appendFn(head, tail func(reflect.Value)) func(reflect.Value) {
+func appendFn(head, tail func(*rowRef, reflect.Value)) func(*rowRef, reflect.Value) {
 	if head == nil {
 		return tail
 	}
 	if tail == nil {
 		return head
 	}
-	return func(v reflect.Value) {
-		head(v)
-		tail(v)
+	return func(r *rowRef, v reflect.Value) {
+		head(r, v)
+		tail(r, v)
+	}
+}
+
+// rowRef identifies a table identity column value along with the identities of the related tables used to build
+// a many relationship hierarchy.
+type rowRef struct {
+	parent *rowRef
+	ident  string
+}
+
+// Hash returns a hash key to be used in a map.
+func (r *rowRef) Hash() string {
+	var builder strings.Builder
+	for p := r; p != nil; p = p.parent {
+		builder.WriteByte('.')
+		builder.WriteString(p.ident)
+	}
+	return builder.String()
+}
+
+// asString attempts to convert the supplied value to a string.
+func asString(v any) string {
+	switch v := v.(type) {
+	case string:
+		return v
+	case *string:
+		return *v
+	case int:
+		return strconv.Itoa(v)
+	case int32:
+		return strconv.Itoa(int(v))
+	case int64:
+		return strconv.Itoa(int(v))
+	default:
+		return fmt.Sprintf("%v", v)
 	}
 }

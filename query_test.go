@@ -347,6 +347,24 @@ func TestAllLeftJoinMany(t *testing.T) {
 	}
 }
 
+func TestAllJoinManySharedRow(t *testing.T) {
+	type users struct {
+		Name      string
+		Addresses []struct {
+			City string
+		} `q:"users.address_id = addresses.id"`
+	}
+	results, err := query.All(context.Background(), db, query.Identity[users])
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+	for _, user := range results {
+		if len(user.Addresses) == 0 {
+			t.Errorf("expected user %q to have an address", user.Name)
+		}
+	}
+}
+
 func TestAllLimit(t *testing.T) {
 	type users struct {
 		query.Limit `q:"1"`
@@ -755,6 +773,22 @@ func TestOneJoinMany(t *testing.T) {
 	}
 	if diff := cmp.Diff(addr, result); diff != "" {
 		t.Error(diff)
+	}
+}
+
+func TestOneJoinManySharedRow(t *testing.T) {
+	type users struct {
+		Name      string
+		Addresses []struct {
+			City string
+		} `q:"users.address_id = addresses.id"`
+	}
+	result, err := query.One(context.Background(), db, query.Identity[users])
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+	if len(result.Addresses) == 0 {
+		t.Errorf("expected user %q to have an address", result.Name)
 	}
 }
 
