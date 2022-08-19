@@ -15,15 +15,6 @@ type Transaction interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-// Transform identifies a transformation function used to transform results from a row to an application
-// model structure. Source is the structure prepared from the database row and Destination is the
-// transformed output.
-type Transform[Source, Destination any] func(Source) Destination
-
-// The Identity function is a Transform function that returns the original value. This function can be used as the
-// transform when the caller wishes to receive the source value.
-func Identity[Source any](src Source) Source { return src }
-
 // All returns a collection of results from the database which are queried according to the Source type. Each row of
 // the database is transformed to the desired Destination type using the supplied transform function. The caller may
 // use the [Identity] function if the caller wishes for Source and Destination to be equal.
