@@ -405,6 +405,65 @@ func TestAllComposition(t *testing.T) {
 	}
 }
 
+func TestAllCompositionDefinedTable(t *testing.T) {
+	type BaseUser struct {
+		query.Table `q:"users"`
+		ID          string
+		Name        sql.NullString
+	}
+	type usersQuery struct {
+		query.OrderBy `q:"name ASC"`
+
+		BaseUser
+	}
+	results, err := query.All(context.Background(), db, query.Identity[usersQuery])
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+
+	names := make([]string, len(results))
+	for i, user := range results {
+		names[i] = user.Name.String
+	}
+	exp := []string{"", "Bob", "Gary", "James", "Joe", "John"}
+	if diff := cmp.Diff(exp, names); diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestAllCompositionJoinMany(t *testing.T) {
+	type BaseAddresses struct {
+		query.Table `q:"addresses"`
+		City        string
+		Users       []struct {
+			query.Conditions `q:"name = 'John' OR name = 'Bob'"`
+			query.OrderBy    `q:"name"`
+
+			Name string
+		} `q:"users.address_id = addresses.id"`
+	}
+	type addresses struct {
+		BaseAddresses
+	}
+	results, err := query.All(context.Background(), db, query.Identity[addresses])
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+
+	addr := addresses{}
+	addr.City = "New York"
+	for _, name := range []string{"Bob", "John"} {
+		addr.Users = append(addr.Users, struct {
+			query.Conditions `q:"name = 'John' OR name = 'Bob'"`
+			query.OrderBy    `q:"name"`
+			Name             string
+		}{Name: name})
+	}
+	if diff := cmp.Diff([]addresses{addr}, results); diff != "" {
+		t.Error(diff)
+	}
+}
+
 func TestAllCompositionProperties(t *testing.T) {
 	type BaseUser struct {
 		query.Conditions `q:"name = 'Bob' OR name = 'James'"`
@@ -720,6 +779,28 @@ func TestOneComposition(t *testing.T) {
 	}
 }
 
+func TestOneCompositionDefinedTable(t *testing.T) {
+	type BaseUser struct {
+		query.Table `q:"users"`
+		ID          string
+		Name        sql.NullString
+	}
+	type usersQuery struct {
+		query.OrderBy `q:"name DESC"`
+
+		BaseUser
+	}
+	result, err := query.One(context.Background(), db, query.Identity[usersQuery])
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+
+	const exp = "John"
+	if result.Name.String != exp {
+		t.Errorf("expected name to be: %q; got: %q", exp, result.Name.String)
+	}
+}
+
 func TestOneCompositionProperties(t *testing.T) {
 	type BaseUser struct {
 		query.Conditions `q:"name = 'Bob' OR name = 'James'"`
@@ -786,6 +867,39 @@ func TestOneCompositionJoin(t *testing.T) {
 		},
 	}
 	if diff := cmp.Diff(exp, result); diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestOneCompositionJoinMany(t *testing.T) {
+	type BaseAddresses struct {
+		query.Table `q:"addresses"`
+		City        string
+		Users       []struct {
+			query.Conditions `q:"name = 'John' OR name = 'Bob'"`
+			query.OrderBy    `q:"name"`
+
+			Name string
+		} `q:"users.address_id = addresses.id"`
+	}
+	type addresses struct {
+		BaseAddresses
+	}
+	result, err := query.One(context.Background(), db, query.Identity[addresses])
+	if err != nil {
+		t.Fatalf("failed to get: %v", err)
+	}
+
+	addr := addresses{}
+	addr.City = "New York"
+	for _, name := range []string{"Bob", "John"} {
+		addr.Users = append(addr.Users, struct {
+			query.Conditions `q:"name = 'John' OR name = 'Bob'"`
+			query.OrderBy    `q:"name"`
+			Name             string
+		}{Name: name})
+	}
+	if diff := cmp.Diff(addr, result); diff != "" {
 		t.Error(diff)
 	}
 }
