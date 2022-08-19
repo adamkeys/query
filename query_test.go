@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"adamkeys.ca/query"
+	"github.com/adamkeys/query"
 	"github.com/google/go-cmp/cmp"
 	_ "github.com/mattn/go-sqlite3"
 )

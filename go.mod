@@ -1,4 +1,4 @@
-module adamkeys.ca/query
+module github.com/adamkeys/query
 
 go 1.19
 
