@@ -99,13 +99,15 @@ Abusing language features for fun and profit, **query** provides a different tak
 
 ## Example Queries
 
+### Basic Select
+
     type users struct {
         ID   int            `q:"id"`
         Name sql.NullString `q:"name"`
     }
     // SELECT id, name FROM users
 
-&nbsp;
+### Select With Attributes
 
     type users struct {
         query.Table      `q:"user"`
@@ -122,9 +124,65 @@ Abusing language features for fun and profit, **query** provides a different tak
     //   GROUP BY id, name ORDER BY name DESC
     //   LIMIT 10 OFFSET ?
 
-&nbsp;
+### Count Query
 
     type users struct {
         Count int `q:"COUNT(*)"`
     }
     // SELECT COUNT(*) FROM users
+
+### Composition
+
+    type usersQuery struct {
+        query.Table `q:"users"`
+
+        ID   int
+        Name string
+    }
+
+    type usersByIDQuery struct {
+        query.Conditions `q:"id = ?"`
+        usersQuery
+    }
+    // SELECT id, name FROM users WHERE id = ?
+
+### Inner Join
+
+    type usersQuery struct {
+        query.Table `q:"users"`
+
+        ID        int
+        Name      string
+        Addresses struct {
+            City string
+        } `q:"users.address_id = addresses.id`
+    }
+    // SELECT users.id, users.name, addresses.city FROM users INNER JOIN addresses ON users.address_id = addresses.id
+
+### Left Join
+
+    type usersQuery struct {
+        query.Table `q:"users"`
+
+        ID        int
+        Name      string
+        Addresses struct {
+            query.LeftJoin
+
+            City sql.NullString
+        } `q:"users.address_id = addresses.id`
+    }
+    // SELECT users.id, users.name, addresses.city FROM users LEFT JOIN addresses ON users.address_id = addresses.id
+
+### Has Many Join
+
+    type usersQuery struct {
+        query.Table `q:"users"`
+
+        ID        int
+        Name      string
+        Addresses []struct {
+            City string
+        } `q:"users.address_id = addresses.id`
+    }
+    // SELECT users.id, users.name, addresses.city FROM users INNER JOIN addresses ON users.address_id = addresses.id
