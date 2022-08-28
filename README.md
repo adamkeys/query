@@ -8,7 +8,46 @@ Abusing language features for fun and profit, **query** provides a different tak
 
 **query** provides a set of helper functions to assist with querying a SQL database. The caller is able to prepare SQL queries through defining a Go `struct` which doubles as the scan target when retrieving a SQL result set. The results may then be transformed into the application domain model in a type-safe manner, or the original query `struct` can be used by the application using the `Ident` function. This reduces the load on the developer to have to define a query, define SQL-safe variables to scan into, and convert the results into a usable model by combining the first and second operation.
 
-## Example
+## Examples
+
+### Find One
+
+    type User struct {
+        ID   int
+        Name string
+    }
+
+    func FindUser(ctx context.Context, db *sql.DB, userID int) (User, error) {
+        type users struct {
+            query.Conditions `q:"id = $1"`
+            ID               int
+            Name             string
+        }
+        return query.One(ctx, db, func(row users) User {
+            return User{ID: row.ID, Name: row.Name}
+        }, userID)
+    }
+
+### Find Many
+
+    type User struct {
+        ID   int
+        Name string
+    }
+
+    func FindUsers(ctx context.Context, db *sql.DB, limit, offset int) ([]User, error) {
+        type users struct {
+            query.Limit  `q:"$1"`
+            query.Offset `q:"$2"`
+            ID           int
+            Name         string
+        }
+        return query.All(ctx, db, func(row users) User {
+            return User{ID: row.ID, Name: row.Name}
+        }, limit, offset)
+    }
+
+### Has Many
 
     type User struct {
         ID        int
