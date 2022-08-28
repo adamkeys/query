@@ -2,19 +2,13 @@
 
 # **query** – A Go SQL query package
 
-Abusing language features for fun and profit, **query** enables writing SQL queries using `struct` types with liberal use of struct tags. No longer does the query need to be disjoined from the structure. The row results are populated right into the same query.
+Abusing language features for fun and profit, **query** provides a different take for querying SQL databases in Go keeping SQL front and centre, but using language constructs to generate the SQL.
 
 ## Introduction
 
 **query** provides a set of helper functions to assist with querying a SQL database. The caller is able to prepare SQL queries through defining a Go `struct` which doubles as the scan target when retrieving a SQL result set. The results may then be transformed into the application domain model in a type-safe manner, or the original query `struct` can be used by the application using the `Ident` function. This reduces the load on the developer to have to define a query, define SQL-safe variables to scan into, and convert the results into a usable model by combining the first and second operation.
 
-## Usage
-
-    type Address struct {
-        ID    int
-        City  string
-        State string
-    }
+## Example
 
     type User struct {
         ID        int
@@ -22,20 +16,14 @@ Abusing language features for fun and profit, **query** enables writing SQL quer
         Addresses []Address
     }
 
+    type Address struct {
+        ID    int
+        City  string
+        State string
+    }
+
     func FindUser(ctx context.Context, db *sql.DB, userID int) (User, error) {
-        type users struct {
-            query.Conditions `users.id = $1`
-
-            ID        int
-            Name      string
-
-            Addresses []struct {
-                ID    int
-                City  string
-                State string
-            } `q:"users.address_id = addresses.id"`
-        }
-        return query.One(ctx, db, func(u users) User {
+        return query.One(ctx, db, func(u userQuery) User {
             user := User{
                 ID:        u.ID,
                 Name:      u.Name,
@@ -50,6 +38,24 @@ Abusing language features for fun and profit, **query** enables writing SQL quer
             }
             return user
         }, userID)
+    }
+
+    type usersQuery struct {
+        query.Table `q:"users"`
+
+        ID        int
+        Name      string
+
+        Addresses []struct {
+            ID    int
+            City  string
+            State string
+        } `q:"users.address_id = addresses.id"`
+    }
+
+    type userQuery struct {
+        query.Conditions `q:"users.id = $1"`
+        usersQuery
     }
 
 ## Example Queries
