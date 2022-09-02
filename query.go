@@ -11,7 +11,8 @@ import (
 	"strings"
 )
 
-// Transaction identifies a queryable database handle. This will most likely be a [sql.DB] or [sql.Tx].
+// Transaction identifies a queryable database handle. This will most likely be a [sql.DB], [sql.Tx] or equivalent
+// query wrapped types provided by [Open].
 type Transaction interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)

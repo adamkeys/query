@@ -186,3 +186,24 @@ Abusing language features for fun and profit, **query** provides a different tak
         } `q:"users.address_id = addresses.id`
     }
     // SELECT users.id, users.name, addresses.city FROM users INNER JOIN addresses ON users.address_id = addresses.id
+
+## Options
+
+While query works with standard `database/sql` database/transaction handles, additional features can be unlocked by opening the database using **query**'s `Open` function. The following options are available:
+
+### Namer
+
+The `Namer` configuration open allows the caller to specify an object that implements the `Namer` interface to provide custom query naming rules. This allows customization for databases that do not match the default standard namer conventions used by **query**.
+
+### Logger
+
+The `Logger` holds a function that accepts a query and arguments which is called when a query is executed. This can be used to help with debugging or to keep tabs on what queries are being executed.
+
+### Example
+
+    db, err := query.Open("sqlite3", "myfile.db", &query.Options{
+        Namer: myNamer,
+        Logger: func(query string, args []any) {
+            fmt.Println(query, args)
+        },
+    })
