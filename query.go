@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math/rand"
 	"reflect"
 	"strconv"
 	"strings"
@@ -195,7 +194,6 @@ func prepareNestedSet(namer Namer, set reflect.Value) (statement, []any, func(*r
 	var ident any
 	stmt.columns = append([]column{{
 		name:     namer.Ident(val.Type()),
-		as:       fmt.Sprintf("ident%d", rand.Int31()),
 		useTable: true,
 	}}, stmt.columns...)
 	bindings = append([]any{&ident}, bindings...)

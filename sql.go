@@ -9,7 +9,6 @@ import (
 // column names in joins.
 type column struct {
 	name     string
-	as       string
 	useTable bool
 }
 
@@ -84,10 +83,6 @@ func (s *statement) writeColumns(w *strings.Builder, i int) {
 			w.WriteByte('.')
 		}
 		w.WriteString(col.name)
-		if col.as != "" {
-			w.WriteString(" AS ")
-			w.WriteString(col.as)
-		}
 		i++
 	}
 	for _, join := range s.joins {
