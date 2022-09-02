@@ -6,30 +6,41 @@ import (
 	"strings"
 )
 
-// elementInfo provides information about the element that is the source of the name.
-type elementInfo interface {
+// Namer identifies an interface for naming properties of a query.
+type Namer interface {
+	// Ident returns the formatted name of the primary key identity column for the supplied element. Only single
+	// column primary keys are supported.
+	Ident(info ElementInfo) string
+	// Table returns the formatted table name for the supplied element.
+	Table(info ElementInfo) string
+	// Column returns the formatted column name for the supplied element.
+	Column(info ElementInfo) string
+}
+
+// ElementInfo provides information about the element that is the source of the name.
+type ElementInfo interface {
 	// Name returns a name provided by the element.
 	Name() string
 }
 
 // defaultNamer identifies the namer used by default when inferring query names from struct identifiers.
-var defaultNamer = standardNamer{}
+var defaultNamer Namer = standardNamer{}
 
 // standardNamer implements a namer using conventions that query considers to be the default.
 type standardNamer struct{}
 
 // Ident returns "id".
-func (s standardNamer) Ident(info elementInfo) string {
+func (s standardNamer) Ident(info ElementInfo) string {
 	return "id"
 }
 
 // Table returns the underscored element name.
-func (s standardNamer) Table(info elementInfo) string {
+func (s standardNamer) Table(info ElementInfo) string {
 	return underscore(info.Name())
 }
 
 // Column returns the underscored element name.
-func (s standardNamer) Column(info elementInfo) string {
+func (s standardNamer) Column(info ElementInfo) string {
 	return underscore(info.Name())
 }
 

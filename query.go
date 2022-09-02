@@ -87,8 +87,9 @@ func Identity[Source any](src Source) Source { return src }
 // An error will be returned if any of the [Transaction] operations fail.
 func All[Source, Destination any](ctx context.Context, tx Transaction, transform Transform[Source, Destination], args ...any) ([]Destination, error) {
 	var results []Source
-	query, bindings, complete := prepareSet(&results)
+	query, bindings, complete := prepareSet(nameWith(tx), &results)
 
+	log(tx, query, args)
 	rows, err := tx.QueryContext(ctx, query.SQL(), args...)
 	if err != nil {
 		return nil, fmt.Errorf("query: %v", err)
@@ -132,25 +133,51 @@ func One[Source, Destination any](ctx context.Context, tx Transaction, transform
 		return results[0], nil
 	}
 
-	query, bindings, _ := prepare(reflect.ValueOf(&src), 0)
+	query, bindings, _ := prepare(nameWith(tx), reflect.ValueOf(&src), 0)
+	log(tx, query, args)
 	err := tx.QueryRowContext(ctx, query.SQL(), args...).Scan(bindings...)
 	return transform(src), err
 }
 
+// log calls the Log method on the [Transaction], if implemented, with the query and arguments used in the
+// calling query operation. This method is provided when a database is opened using [Open].
+func log(tx Transaction, query statement, args []any) {
+	txl, ok := tx.(interface{ Log(string, []any) })
+	if !ok {
+		return
+	}
+	txl.Log(query.SQL(), args)
+}
+
+// nameWith returns the namer associated with the [Transaction], if implemented, and otherwise returns the default
+// namer.
+func nameWith(tx Transaction) Namer {
+	txn, ok := tx.(interface{ NameWith() Namer })
+	if !ok {
+		return defaultNamer
+	}
+
+	namer := txn.NameWith()
+	if namer == nil {
+		return defaultNamer
+	}
+	return namer
+}
+
 // prepareSet wraps prepareNestedSet to add the values to the top level slice rather than slices nested within
 // stored values. This is intended to be the top level call when preparing a set of results.
-func prepareSet(set any) (statement, []any, func()) {
+func prepareSet(namer Namer, set any) (statement, []any, func()) {
 	val := reflect.ValueOf(set)
 	elem := val.Elem()
 	if !hasMany(elem.Type().Elem()) {
 		row := reflect.New(elem.Type().Elem())
-		stmt, bindings, _ := prepare(row, 0)
+		stmt, bindings, _ := prepare(namer, row, 0)
 		return stmt, bindings, func() {
 			elem.Set(reflect.Append(elem, row.Elem()))
 		}
 	}
 
-	stmt, bindings, complete := prepareNestedSet(val)
+	stmt, bindings, complete := prepareNestedSet(namer, val)
 	return stmt, bindings, func() {
 		complete(nil, elem)
 	}
@@ -159,14 +186,14 @@ func prepareSet(set any) (statement, []any, func()) {
 // prepareNestedSet returns a prepared SQL statement, bindings suitable for use by [sql.Rows.Scan], and a completion
 // function which is to be called after [sql.Rows.Scan] has been scanned into the bindings. The completion function
 // adds the bound results to the passed in slice value.
-func prepareNestedSet(set reflect.Value) (statement, []any, func(*rowRef, reflect.Value)) {
+func prepareNestedSet(namer Namer, set reflect.Value) (statement, []any, func(*rowRef, reflect.Value)) {
 	val := set.Elem()
 	row := reflect.New(val.Type().Elem())
-	stmt, bindings, complete := prepare(row, 0)
+	stmt, bindings, complete := prepare(namer, row, 0)
 
 	var ident any
 	stmt.columns = append([]column{{
-		name:     defaultNamer.Ident(val.Type()),
+		name:     namer.Ident(val.Type()),
 		as:       fmt.Sprintf("ident%d", rand.Int31()),
 		useTable: true,
 	}}, stmt.columns...)
@@ -193,7 +220,7 @@ func prepareNestedSet(set reflect.Value) (statement, []any, func(*rowRef, reflec
 }
 
 // prepare returns the prepared SQL query and destination bindings suitable for use by [sql.Rows.Scan].
-func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, reflect.Value)) {
+func prepare(namer Namer, src reflect.Value, depth int) (statement, []any, func(*rowRef, reflect.Value)) {
 	val := src.Elem()
 	typ := val.Type()
 	bindings := make([]any, 0, typ.NumField())
@@ -223,9 +250,9 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, refl
 			if tag == "" {
 				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
 			}
-			s, b, f := prepareNestedSet(val.Field(i).Addr())
+			s, b, f := prepareNestedSet(namer, val.Field(i).Addr())
 			if s.table == "" {
-				s.table = defaultNamer.Table(fieldInfo{fld})
+				s.table = namer.Table(fieldInfo{fld})
 			}
 			if s.join == joinNone {
 				s.join = joinInner
@@ -241,9 +268,9 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, refl
 			if tag == "" {
 				panic(fmt.Errorf("%T.%s requires a struct tag describing the join conditions", src, fld.Name))
 			}
-			s, b, f := prepare(val.Field(i).Addr(), depth+1)
+			s, b, f := prepare(namer, val.Field(i).Addr(), depth+1)
 			if s.table == "" {
-				s.table = defaultNamer.Table(fieldInfo{fld})
+				s.table = namer.Table(fieldInfo{fld})
 			}
 			if s.join == joinNone {
 				s.join = joinInner
@@ -257,7 +284,7 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, refl
 			})
 		default:
 			if fld.Anonymous {
-				s, b, f := prepare(val.Field(i).Addr(), depth+1)
+				s, b, f := prepare(namer, val.Field(i).Addr(), depth+1)
 				if stmt.table == "" {
 					stmt.table = s.table
 				}
@@ -277,7 +304,7 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, refl
 			col := column{name: tag}
 			if tag == "" {
 				col = column{
-					name:     defaultNamer.Column(fieldInfo{fld}),
+					name:     namer.Column(fieldInfo{fld}),
 					useTable: true,
 				}
 			}
@@ -287,7 +314,7 @@ func prepare(src reflect.Value, depth int) (statement, []any, func(*rowRef, refl
 	}
 
 	if depth == 0 && stmt.table == "" {
-		stmt.table = defaultNamer.Table(typ)
+		stmt.table = namer.Table(typ)
 	}
 
 	return stmt, bindings, completion
